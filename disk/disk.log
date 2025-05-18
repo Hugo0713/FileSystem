@@ -1,0 +1,13 @@
+[INFO] Disk initialized: disk.img, 1024 Cylinders, 63 Sectors per cylinder
+[INFO] Use command: W 0 1 6 Q QWE 
+[INFO] Wrote 6 bytes to cylinder 0, sector 1
+[INFO] Use command: R 0 1
+[INFO] Read 512 bytes from cylinder 0, sector 1
+[INFO] Use command: W 1 0 2 
+[INFO] Use command: W 1 0 2 	1
+[INFO] Wrote 2 bytes to cylinder 1, sector 0
+[INFO] Use command: R 1 0
+[INFO] Read 512 bytes from cylinder 1, sector 0
+[INFO] Use command: E
+[INFO] Disk unmapped
+[INFO] Disk closed
