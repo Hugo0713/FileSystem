@@ -3,43 +3,49 @@
 
 #include "common.h"
 
-#define NDIRECT 10  // Direct blocks, you can change this value
+#define NDIRECT 10 // Direct blocks, you can change this value
 
-#define MAXFILEB (NDIRECT + APB + APB * APB)
+#define APB (BSIZE / sizeof(uint))           // Address per block 128
+#define MAXFILEB (NDIRECT + APB + APB * APB) // Maximum file size in blocks 16522
+#define MAXFILE (MAXFILEB * BSIZE)           // Maximum file size in bytes (8MB)
 
-enum {
-    T_DIR = 1,   // Directory
-    T_FILE = 2,  // File
+enum
+{
+    T_UNUSED = 0, // Unused
+    T_DIR = 1,    // Directory
+    T_FILE = 2,   // File
 };
 
 // You should add more fields
 // the size of a dinode must divide BSIZE
-typedef struct {
-    ushort type;              // File type
-    uint size;                // Size in bytes
-    uint blocks;              // Number of blocks, may be larger than size
-    uint addrs[NDIRECT + 2];  // Data block addresses,
-                              // the last two are indirect blocks
-    // ...
-    // ...
-    // Other fields can be added as needed
-} dinode;
+typedef struct
+{
+    ushort type;             // File type
+    ushort mode;             // File mode
+    ushort nlink;            // Number of links
+    ushort uid;              // User ID
+    uint size;               // Size in bytes
+    uint blocks;             // Number of blocks, may be larger than size
+    uint addrs[NDIRECT + 2]; // Data block addresses, the last two are indirect blocks
+
+} dinode; // 64 bytes, 8 dinodes for each blocks
 
 // inode in memory
 // more useful fields can be added, e.g. reference count
-typedef struct {
-    uint inum;
-    ushort type;
-    uint size;
-    uint blocks;
+typedef struct
+{
+    uint inum;    // Inode number
+    ushort type;  // File type
+    ushort mode;  // File mode
+    ushort nlink; // Number of links
+    ushort uid;   // User ID
+    uint size;    // Size in bytes
+    uint blocks;  // Number of blocks, may be larger than size
     uint addrs[NDIRECT + 2];
-    // ...
-    // ...
-    // Other fields can be added as needed
 } inode;
 
 // You can change the size of MAXNAME
-#define MAXNAME 12
+#define MAXNAME 18
 
 // Get an inode by number (returns allocated inode or NULL)
 // Don't forget to use iput()

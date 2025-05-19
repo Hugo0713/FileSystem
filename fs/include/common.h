@@ -14,11 +14,15 @@ typedef unsigned int uint;
 // block of free map containing bit for block b
 #define BBLOCK(b) ((b) / BPB + sb.bmapstart)
 
+// block of free map containing bit for inode i
+#define IBLOCK(i) ((i) / BPB + sb.inodebmapstart)
+
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 // error codes
-enum {
+enum
+{
     E_SUCCESS = 0,
     E_ERROR = 1,
     E_NOT_LOGGED_IN = 2,

@@ -3,14 +3,26 @@
 
 #include "common.h"
 
-typedef struct {
-    uint magic;      // Magic number, used to identify the file system
-    uint size;       // Size in blocks
-    uint bmapstart;  // Block number of first free map block
-    // ...
-    // ...
-    // Other fields can be added as needed
-} superblock;
+typedef struct
+{
+    uint magic;     // Magic number, used to identify the file system (0xf0f03410)
+    uint size;      // Size in blocks
+
+    uint bmapstart; // Block number of first free bitmap block -> disk block
+    uint bmapblocks; // Number of blocks used for free bitmap
+
+    uint inodebmapstart; // Block number of first inode bitmap block
+    uint inodebmapblocks; // Number of blocks used for inode bitmap
+
+    uint inodestart; // Block number of first inode(root inode) block
+    uint ninodes;    // Total number of inodes
+
+    uint datastart;  // Block number of first data block
+    uint ndatablocks; // Total number of data blocks
+
+    uint logstart;   // Start block of log
+    uint nlog;       // Number of log blocks
+} superblock; // 48 bytes
 
 // sb is defined in block.c
 extern superblock sb;

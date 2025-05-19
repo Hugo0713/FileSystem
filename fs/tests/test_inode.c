@@ -7,12 +7,14 @@
 #include <time.h>
 #include <stdlib.h>
 
-inline static void format() {
+inline static void format()
+{
     cmd_login(1);
     cmd_f(1024, 63);
 }
 
-mt_test(test_ialloc) {
+mt_test(test_ialloc)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -28,7 +30,8 @@ mt_test(test_ialloc) {
     return 0;
 }
 
-mt_test(test_iget) {
+mt_test(test_iget)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -42,8 +45,8 @@ mt_test(test_iget) {
     return 0;
 }
 
-
-mt_test(test_iupdate) {
+mt_test(test_iupdate)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -65,7 +68,8 @@ mt_test(test_iupdate) {
     return 0;
 }
 
-mt_test(test_writei) {
+mt_test(test_writei)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -87,7 +91,8 @@ mt_test(test_writei) {
     return 0;
 }
 
-mt_test(test_readi) {
+mt_test(test_readi)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -105,13 +110,14 @@ mt_test(test_readi) {
     // Test reading beyond the file size
     uchar extra_buf[10];
     bytes_read = readi(ip, extra_buf, sizeof(data), sizeof(extra_buf));
-    mt_assert(bytes_read == 0);  // No data should be read beyond EOF
+    mt_assert(bytes_read == 0); // No data should be read beyond EOF
 
     iput(ip);
     return 0;
 }
 
-mt_test(test_read_write_mixed) {
+mt_test(test_read_write_mixed)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -146,8 +152,8 @@ mt_test(test_read_write_mixed) {
     return 0;
 }
 
-
-mt_test(test_random_binary_read_write) {
+mt_test(test_random_binary_read_write)
+{
     format();
     inode *ip = ialloc(T_FILE);
     mt_assert(ip != NULL);
@@ -158,7 +164,8 @@ mt_test(test_random_binary_read_write) {
     mt_assert(random_data != NULL);
 
     srand(time(NULL));
-    for (uint i = 0; i < data_size; i++) {
+    for (uint i = 0; i < data_size; i++)
+    {
         random_data[i] = rand() % 256;
     }
 
@@ -179,7 +186,7 @@ mt_test(test_random_binary_read_write) {
     mt_assert(bytes_written == data_size);
     mt_assert(ip->size == data_size + offset);
     free(read_buf);
-    
+
     read_buf = malloc(ip->size);
     mt_assert(read_buf != NULL);
     bytes_read = readi(ip, read_buf, 0, ip->size);
@@ -194,7 +201,8 @@ mt_test(test_random_binary_read_write) {
     return 0;
 }
 
-void inode_tests() {
+void inode_tests()
+{
     mt_run_test(test_iget);
     mt_run_test(test_ialloc);
     mt_run_test(test_iupdate);

@@ -4,14 +4,16 @@
 #include "common.h"
 #include "inode.h"
 
-// used for cmd_ls
-typedef struct {
-    short type;
+// used for cmd_ls and dirent
+typedef struct
+{
+    uint inum;   // inode number
+    uint size;   // size in bytes
+    ushort type; // file type: 0: unused, 1: directory, 2: file
+    ushort mode; // file mode
+    ushort uid;  // user id
     char name[MAXNAME];
-    // ...
-    // ...
-    // Other fields can be added as needed
-} entry;
+} entry; // 32 bytes, 16 entries per block
 
 void sbinit();
 
