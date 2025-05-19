@@ -8,6 +8,8 @@ typedef unsigned int uint;
 // block size in bytes
 #define BSIZE 512
 
+#define MAXBLOCK (BSIZE * BSIZE)
+
 // bits per block
 #define BPB (BSIZE * 8)
 

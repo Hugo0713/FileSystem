@@ -27,9 +27,12 @@ typedef struct
 // sb is defined in block.c
 extern superblock sb;
 
-void zero_block(uint bno);
-uint allocate_block();
-void free_block(uint bno);
+// RAMDISK
+extern uchar ramdisk[MAXBLOCK];
+
+void zero_block(uint bno); 
+uint allocate_block(); 
+void free_block(uint bno); 
 
 void get_disk_info(int *ncyl, int *nsec);
 void read_block(int blockno, uchar *buf);
