@@ -59,6 +59,8 @@ void free_block(uint bno)
 
 void get_disk_info(int *ncyl, int *nsec)
 {
+    *ncyl = NCYL;
+    *nsec = NSEC;
 }
 
 void read_block(int blockno, uchar *buf)

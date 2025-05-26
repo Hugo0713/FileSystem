@@ -17,11 +17,11 @@ typedef struct
     uint inodestart; // Block number of first inode(root inode) block
     uint ninodes;    // Total number of inodes
 
-    uint datastart;  // Block number of first data block
-    uint ndatablocks; // Total number of data blocks
-
     uint logstart;   // Start block of log
     uint nlog;       // Number of log blocks
+
+    uint datastart;  // Block number of first data block
+    uint ndatablocks; // Total number of data blocks
 } superblock; // 48 bytes
 
 // sb is defined in block.c

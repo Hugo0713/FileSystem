@@ -17,6 +17,10 @@ typedef struct
 
 void sbinit();
 
+void init_sb(int size);
+void init_data_bitmap();
+void init_inode_bitmap();
+void init_root_directory();
 int cmd_f(int ncyl, int nsec);
 
 int cmd_mk(char *name, short mode);

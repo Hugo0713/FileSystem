@@ -7,6 +7,10 @@ typedef unsigned int uint;
 
 // block size in bytes
 #define BSIZE 512
+#define NCYL 1024
+#define NSEC 63
+#define MAGIC 0x12345678 // Magic number for superblock
+#define LOGS 20          // Number of log blocks
 
 #define MAXBLOCK (BSIZE * BSIZE)
 
