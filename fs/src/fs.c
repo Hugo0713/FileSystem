@@ -125,7 +125,7 @@ void init_root_directory()
     root_inode.nlink = 2;                // "." 和父目录的链接
     root_inode.uid = 0;                  // root用户
     root_inode.size = 2 * sizeof(entry); // "." 和 ".." 两个条目
-    root_inode.blocks = 1;               // 分配一个数据块
+    root_inode.dirty = 1;               // 标记为已修改
 
     // 为根目录分配一个数据块
     uint root_data_block = sb.datastart; // 使用第一个数据块

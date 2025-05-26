@@ -25,7 +25,7 @@ typedef struct
     ushort nlink;            // Number of links
     ushort uid;              // User ID
     uint size;               // Size in bytes
-    uint blocks;             // Number of blocks, may be larger than size
+    uint dirty;              // Dirty flag, 1 if inode is modified
     uint addrs[NDIRECT + 2]; // Data block addresses, the last two are indirect blocks
 
 } dinode; // 64 bytes, 8 dinodes for each blocks
@@ -40,7 +40,7 @@ typedef struct
     ushort nlink; // Number of links
     ushort uid;   // User ID
     uint size;    // Size in bytes
-    uint blocks;  // Number of blocks, may be larger than size
+    uint dirty;   // Dirty flag, 1 if inode is modified
     uint addrs[NDIRECT + 2];
 } inode;
 
@@ -51,9 +51,15 @@ typedef struct
 // Don't forget to use iput()
 inode *iget(uint inum);
 
+void free_inode_blocks(inode *ip);
+void free_inode_in_bitmap(uint inum);
+void clear_disk_inode(uint inum);
 // Free an inode (or decrement reference count)
 void iput(inode *ip);
 
+void init_inode(inode *ip, uint inum, short type);
+uint find_free_inode();
+int mark_inode_used(uint inum);
 // Allocate a new inode of specified type (returns allocated inode or NULL)
 // Don't forget to use iput()
 inode *ialloc(short type);

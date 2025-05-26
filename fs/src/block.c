@@ -49,12 +49,27 @@ uint allocate_block()
 
 void free_block(uint bno)
 {
+    if (bno < sb.datastart || bno >= sb.size)
+    {
+        Error("free_block: blockno %d out of range", bno);
+        return;
+    }
+
+    zero_block(bno);
     uchar buf[BSIZE];
     uint blockno = bno / (BSIZE * 8);
     uint bitno = bno % (BSIZE * 8);
     read_block(sb.bmapstart + blockno, buf);
+    // 检查块是否已经空闲
+    if ((buf[bitno / 8] & (1 << (bitno % 8))) == 0)
+    {
+        Warn("free_block: block %d already free", bno);
+        return;
+    }
     buf[bitno / 8] &= ~(1 << (bitno % 8));
     write_block(sb.bmapstart + blockno, buf);
+    
+    Log("free_block: block %d freed", bno);
 }
 
 void get_disk_info(int *ncyl, int *nsec)
