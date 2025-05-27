@@ -129,7 +129,7 @@ uint bitmap_find_free(bitmap_type_t type)
 
                         if (item_num >= max_items)
                         {
-                            return -1; // 超出范围，返回0表示未找到
+                            return 0; // 超出范围，返回0表示未找到
                         }
 
                         return item_num;
@@ -139,47 +139,41 @@ uint bitmap_find_free(bitmap_type_t type)
         }
     }
 
-    return -1; // 未找到空闲项
+    return 0; // 未找到空闲项
 }
 
-// 统计已使用的项数
-uint bitmap_count_used(bitmap_type_t type)
+// 清空整个位图（设置为全0）
+int bitmap_clear_all(bitmap_type_t type)
 {
     uint start_block, num_blocks, max_items;
     get_bitmap_info(type, &start_block, &num_blocks, &max_items);
 
-    uint count = 0;
+    uchar buf[BSIZE];
+    memset(buf, 0, BSIZE);
 
     for (uint i = 0; i < num_blocks; i++)
     {
-        uchar buf[BSIZE];
-        read_block(start_block + i, buf);
-
-        for (int j = 0; j < BSIZE; j++)
-        {
-            // 计算字节中的位数
-            uchar byte = buf[j];
-            while (byte)
-            {
-                count += byte & 1;
-                byte >>= 1;
-            }
-        }
+        write_block(start_block + i, buf);
     }
 
-    // 确保不超过最大项数
-    return (count > max_items) ? max_items : count;
+    Log("bitmap_clear_all: cleared %s bitmap",
+        type == BITMAP_INODE ? "inode" : "block");
+    return 0;
 }
 
-// 批量设置位图状态
-int bitmap_set_range(bitmap_type_t type, uint start_item, uint count, int used)
+// 标记系统使用的块为已分配
+int bitmap_set_system_blocks_used(void)
 {
-    for (uint i = 0; i < count; i++)
+    // 标记从块0到数据区开始之前的所有块为已使用
+    for (uint i = 0; i < sb.datastart; i++)
     {
-        if (bitmap_set(type, start_item + i, used) < 0)
+        if (bitmap_set(BITMAP_BLOCK, i, 1) < 0)
         {
+            Error("bitmap_set_system_blocks_used: failed to mark block %d", i);
             return -1;
         }
     }
+
+    Log("bitmap_set_system_blocks_used: marked %d system blocks as used", sb.datastart);
     return 0;
 }

@@ -228,7 +228,7 @@ static int mark_inode_used(uint inum)
 inode *ialloc(short type)
 {
     uint inum = find_free_inode();
-    if (inum == -1)
+    if (inum == 0)
     {
         Error("ialloc: no free inodes available");
         return NULL;

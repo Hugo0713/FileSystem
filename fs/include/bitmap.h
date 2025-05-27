@@ -53,4 +53,8 @@ static inline uint block_bitmap_find_free(void)
     return bitmap_find_free(BITMAP_BLOCK);
 }
 
+// 批量操作函数
+int bitmap_clear_all(bitmap_type_t type);
+int bitmap_set_system_blocks_used(void);
+
 #endif // BITMAP_H
