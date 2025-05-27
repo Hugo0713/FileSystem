@@ -287,13 +287,226 @@ void iupdate(inode *ip)
     Log("iupdate: updated inode %d to disk", ip->inum);
 }
 
+// 根据偏移量获取对应的块号(考虑一级间接块和二级间接块分配的逻辑块号)
+static uint bmap(inode *ip, uint bn)
+{ // bn: 0 ~ MAXFILEB - 1
+    uint addr;
+    uint *indirect_block;
+    uchar buf[BSIZE];
+
+    // 直接块
+    if (bn < NDIRECT)
+    {
+        if ((addr = ip->addrs[bn]) == 0)
+        {
+            ip->addrs[bn] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            ip->dirty = 1;
+        }
+        return addr;
+    }
+
+    bn -= NDIRECT; // 跳过直接块部分
+    // 一级间接块
+    if (bn < APB)
+    {
+        // 分配间接块（如果需要）
+        addr = ip->addrs[NDIRECT];
+        if (addr == 0)
+        {
+            ip->addrs[NDIRECT] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            ip->dirty = 1;
+        }
+
+        // 读取间接块
+        read_block(addr, buf);
+        indirect_block = (uint *)buf; // 一级间接块存储的地址数组
+
+        // 分配数据块（如果需要）
+        if ((addr = indirect_block[bn]) == 0)
+        {
+            indirect_block[bn] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            write_block(ip->addrs[NDIRECT], buf); // 更新一级间接块
+        }
+        return addr;
+    }
+
+    bn -= APB; // 跳过一级间接块部分
+    // 二级间接块
+    if (bn < APB * APB)
+    {
+        // 分配二级间接块（如果需要）
+        if ((addr = ip->addrs[NDIRECT + 1]) == 0)
+        {
+            ip->addrs[NDIRECT + 1] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            ip->dirty = 1;
+        }
+
+        // 读取二级间接块
+        read_block(addr, buf);
+        indirect_block = (uint *)buf;
+
+        // 分配一级间接块（如果需要）
+        if ((addr = indirect_block[bn / APB]) == 0)
+        {
+            indirect_block[bn / APB] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            write_block(ip->addrs[NDIRECT + 1], buf);
+        }
+
+        // 读取一级间接块
+        read_block(addr, buf);
+        indirect_block = (uint *)buf;
+
+        // 分配数据块（如果需要）
+        if ((addr = indirect_block[bn % APB]) == 0)
+        {
+            indirect_block[bn % APB] = addr = alloc_block();
+            if (addr == 0)
+            {
+                return 0;
+            }
+            write_block(ip->addrs[NDIRECT + 1], buf);
+        }
+        return addr;
+    }
+
+    // 超出文件大小限制
+    Error("bmap: block number %d out of range", bn);
+    return 0;
+}
+
 int readi(inode *ip, uchar *dst, uint off, uint n)
 {
-    return n;
+    uint total, bytes_this_iteration; // 总共读取的字节数, 本次读取的字节数
+    uint target_block, block_offset;  // 目标块号和块内偏移
+    uchar buf[BSIZE];
+
+    if (ip == NULL || dst == NULL)
+    {
+        Error("readi: invalid parameters");
+        return -1;
+    }
+    if (off > ip->size)
+    {
+        Error("readi: offset %d beyond file size %d", off, ip->size);
+        return 0;
+    }
+
+    // 调整读取字节数，不能超出文件大小
+    if (off + n > ip->size)
+    {
+        n = ip->size - off;
+        Error("readi: adjusting read size to %d bytes", n);
+    }
+
+    Log("readi: reading %d bytes from inode %d at offset %d", n, ip->inum, off);
+
+    for (total = 0; total < n; total += bytes_this_iteration, off += bytes_this_iteration, dst += bytes_this_iteration)
+    {
+        // 计算当前读取位置对应的块号和块内偏移
+        target_block = off / BSIZE;
+        block_offset = off % BSIZE;
+
+        // 获取物理块号
+        uint block_addr = bmap(ip, target_block);
+        if (block_addr == 0)
+        {
+            Error("readi: failed to get block address for block %d", target_block);
+            break;
+        }
+
+        // 读取块数据
+        read_block(block_addr, buf);
+        // 计算本次读取的字节数
+        bytes_this_iteration = BSIZE - block_offset;
+        if (bytes_this_iteration > n - total)
+        {
+            bytes_this_iteration = n - total;
+        }
+        memcpy(dst, buf + block_offset, bytes_this_iteration);
+    }
+
+    Log("readi: successfully read %d bytes from inode %d", total, ip->inum);
+    return total;
 }
 
 int writei(inode *ip, uchar *src, uint off, uint n)
 {
+    uint total, bytes_this_iteration; // 总共写入的字节数, 本次写入的字节数
+    uint target_block, block_offset;  // 目标块号和块内偏移
+    uchar buf[BSIZE];
+
+    // 参数检查
+    if (ip == NULL || src == NULL)
+    {
+        Error("writei: invalid parameters");
+        return -1;
+    }
+    uint max_size = MAXFILE;
+    if (off + n > max_size)
+    {
+        Error("writei: write would exceed maximum file size");
+        return -1;
+    }
+    Log("writei: writing %d bytes to inode %d at offset %d", n, ip->inum, off);
+
+    for (total = 0; total < n; total += bytes_this_iteration, off += bytes_this_iteration, src += bytes_this_iteration)
+    {
+        // 计算当前写入位置对应的块号和块内偏移
+        target_block = off / BSIZE;
+        block_offset = off % BSIZE;
+        // 获取物理块号（如果不存在会自动分配）
+        uint block_addr = bmap(ip, target_block);
+        if (block_addr == 0)
+        {
+            Error("writei: failed to allocate block for block %d", target_block);
+            break;
+        }
+        // 计算本次写入的字节数
+        bytes_this_iteration = BSIZE - block_offset;
+        if (bytes_this_iteration > n - total)
+        {
+            bytes_this_iteration = n - total;
+        }
+
+        // 如果不是整块写入，需要先读取现有数据
+        if (block_offset > 0 || bytes_this_iteration < BSIZE)
+        {
+            read_block(block_addr, buf);
+        }
+        memcpy(buf + block_offset, src, bytes_this_iteration);
+        write_block(block_addr, buf);
+    }
+
+    // 更新文件大小
+    uint new_size = off; // 最后一次写入的偏移量
+    if (new_size > ip->size)
+    {
+        ip->size = new_size;
+        ip->dirty = 1;
+    }
+
+    ip->dirty = 1;
+    Log("writei: successfully wrote %d bytes to inode %d", total, ip->inum);
     iupdate(ip);
-    return n;
+    return total;
 }

@@ -11,6 +11,7 @@ typedef unsigned int uint;
 #define NSEC 63
 #define MAGIC 0x12345678 // Magic number for superblock
 #define LOGS 20          // Number of log blocks
+#define RATE 50          // Rate of log blocks to total blocks
 
 #define MAXBLOCK (BSIZE * BSIZE)
 

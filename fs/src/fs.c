@@ -28,7 +28,7 @@ void init_sb(int size)
     uint bmapblocks = size / BPB + 1;             // 数据块位图块数
     uint inodebmapstart = bmapstart + bmapblocks; // inode位图从数据块位图之后开始
 
-    uint ninodes = size / 10;                 // inode数量约为总块数的1/10
+    uint ninodes = size / RATE;                 // inode数量约为总块数的1/10
     uint inodebmapblocks = ninodes / BPB + 1; // inode位图块数
     uint inodestart = inodebmapstart + inodebmapblocks;
 

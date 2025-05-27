@@ -67,6 +67,7 @@ inode *ialloc(short type);
 // Update disk inode with memory inode contents
 void iupdate(inode *ip);
 
+uint bmap(inode *ip, uint bn); // Get the block number for a given block index
 // Read from an inode (returns bytes read or -1 on error)
 int readi(inode *ip, uchar *dst, uint off, uint n);
 
