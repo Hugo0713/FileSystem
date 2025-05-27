@@ -6,6 +6,7 @@
 
 #include "block.h"
 #include "log.h"
+#include "bitmap.h"
 
 inode *iget(uint inum)
 {
@@ -121,14 +122,10 @@ void free_inode_blocks(inode *ip)
 
 void free_inode_in_bitmap(uint inum)
 {
-    uint bmap_block = sb.inodebmapstart + inum / (BSIZE * 8);
-    uint bmap_offset = (inum % (BSIZE * 8)) / 8;
-    uint bmap_bit = inum % 8;
-
-    uchar buf[BSIZE];
-    read_block(bmap_block, buf);
-    buf[bmap_offset] &= ~(1 << bmap_bit);
-    write_block(bmap_block, buf);
+    if (inode_bitmap_set_free(inum) < 0)
+    {
+        Error("free_inode_in_bitmap: failed to free inode %d", inum);
+    }
 }
 
 void clear_disk_inode(uint inum)
@@ -208,66 +205,24 @@ void init_inode(inode *ip, uint inum, short type)
 
 static uint find_free_inode()
 {
-    // 遍历所有inode位图块，寻找空闲inode
-    for (uint i = 0; i < sb.inodebmapblocks; i++)
-    {
-        uchar buf[BSIZE];
-        read_block(sb.inodebmapstart + i, buf);
-
-        // 在当前位图块中查找空闲位
-        for (int j = 0; j < BSIZE; j++)
-        {
-            if (buf[j] != 0xFF) // 这个字节中有空闲位
-            {
-                // 找到第一个空闲位
-                for (int k = 0; k < 8; k++)
-                {
-                    if ((buf[j] & (1 << k)) == 0) // 找到空闲位
-                    {
-                        // 计算inode编号
-                        uint inum = i * BSIZE * 8 + j * 8 + k;
-
-                        // 检查是否超出inode总数
-                        if (inum >= sb.ninodes)
-                        {
-                            return -1; // 表示未找到
-                        }
-
-                        return inum;
-                    }
-                }
-            }
-        }
-    }
-    return -1;
+    return inode_bitmap_find_free();
 }
 
 static int mark_inode_used(uint inum)
 {
-    uint i = inum / (BSIZE * 8);
-    uint j = (inum % (BSIZE * 8)) / 8;
-    uint k = inum % 8;
-
-    if (i >= sb.inodebmapblocks)
+    int used = inode_bitmap_is_used(inum);
+    if (used < 0)
     {
         Error("mark_inode_used: invalid inode number %d", inum);
         return -1;
     }
-
-    uchar buf[BSIZE];
-    read_block(sb.inodebmapstart + i, buf);
-
-    // 检查是否已经被使用
-    if (buf[j] & (1 << k))
+    if (used)
     {
         Error("mark_inode_used: inode %d already in use", inum);
         return -1;
     }
-
     // 标记为已使用
-    buf[j] |= (1 << k);
-    write_block(sb.inodebmapstart + i, buf);
-    return 0;
+    return inode_bitmap_set_used(inum);
 }
 
 inode *ialloc(short type)

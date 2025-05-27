@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "*.cu": "cuda-cpp",
-        "mintest.h": "c"
+        "mintest.h": "c",
+        "bitmap.h": "c"
     }
 }

@@ -22,37 +22,32 @@ static inline int inode_bitmap_is_used(uint inum)
 {
     return bitmap_is_used(BITMAP_INODE, inum);
 }
-
 static inline int inode_bitmap_set_used(uint inum)
 {
     return bitmap_set(BITMAP_INODE, inum, 1);
 }
-
 static inline int inode_bitmap_set_free(uint inum)
 {
     return bitmap_set(BITMAP_INODE, inum, 0);
 }
-
 static inline uint inode_bitmap_find_free(void)
 {
     return bitmap_find_free(BITMAP_INODE);
 }
 
+
 static inline int block_bitmap_is_used(uint bno)
 {
     return bitmap_is_used(BITMAP_BLOCK, bno);
 }
-
 static inline int block_bitmap_set_used(uint bno)
 {
     return bitmap_set(BITMAP_BLOCK, bno, 1);
 }
-
 static inline int block_bitmap_set_free(uint bno)
 {
     return bitmap_set(BITMAP_BLOCK, bno, 0);
 }
-
 static inline uint block_bitmap_find_free(void)
 {
     return bitmap_find_free(BITMAP_BLOCK);

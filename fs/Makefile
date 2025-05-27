@@ -5,12 +5,14 @@ BUILD_DIR = build
 FS_OBJS = src/server.o \
 	src/block.o \
 	src/fs.o \
-	src/inode.o 
+	src/inode.o \
+	src/bitmap.o
 
 FS_local_OBJS = src/main.o \
 	src/block.o \
 	src/fs.o \
-	src/inode.o
+	src/inode.o \
+	src/bitmap.o
 
 FC_OBJS = src/client.o
 
@@ -18,6 +20,7 @@ test_fs_OBJS = tests/main.o \
 	src/block.o \
 	src/fs.o \
 	src/inode.o \
+	src/bitmap.o \
 	tests/test_block.o \
 	tests/test_fs.o \
 	tests/test_inode.o

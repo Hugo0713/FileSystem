@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "log.h"
+#include "bitmap.h"
 
 superblock sb;
 uchar ramdisk[MAXBLOCK];
@@ -17,34 +18,24 @@ void zero_block(uint bno)
 
 uint allocate_block()
 {
-    uchar buf[BSIZE];
-    uint bno = 0;
-    int i = 0;
-
-    while (i < sb.bmapblocks)
+    uint bno = block_bitmap_find_free();
+    if (bno == -1)
     {
-        read_block(sb.bmapstart + i, buf);
-        for (int j = 0; j < BSIZE; j++)
-        {
-            if (buf[j] != 0xFF)
-            {
-                // Find the first free block
-                for (int k = 0; k < 8; k++)
-                {
-                    if ((buf[j] & (1 << k)) == 0)
-                    {
-                        buf[j] |= (1 << k);
-                        bno = i * BSIZE * 8 + j * 8 + k;
-                        write_block(sb.bmapstart + i, buf);
-                        return bno;
-                    }
-                }
-            }
-        }
-        i++;
+        Error("alloc_block: no free blocks available");
+        return 0;
     }
-    Warn("Out of blocks");
-    return 0;
+
+    if (block_bitmap_set_used(bno) < 0)
+    {
+        Error("alloc_block: failed to mark block %d as used", bno);
+        return 0;
+    }
+
+    // 清零新分配的块
+    zero_block(bno);
+
+    Log("alloc_block: allocated block %d", bno);
+    return bno;
 }
 
 void free_block(uint bno)
@@ -54,21 +45,27 @@ void free_block(uint bno)
         Error("free_block: blockno %d out of range", bno);
         return;
     }
-
-    zero_block(bno);
-    uchar buf[BSIZE];
-    uint blockno = bno / (BSIZE * 8);
-    uint bitno = bno % (BSIZE * 8);
-    read_block(sb.bmapstart + blockno, buf);
-    // 检查块是否已经空闲
-    if ((buf[bitno / 8] & (1 << (bitno % 8))) == 0)
+    // 检查是否已经空闲
+    int used = block_bitmap_is_used(bno);
+    if (used < 0)
+    {
+        Error("free_block: invalid block number %d", bno);
+        return;
+    }
+    if (!used)
     {
         Warn("free_block: block %d already free", bno);
         return;
     }
-    buf[bitno / 8] &= ~(1 << (bitno % 8));
-    write_block(sb.bmapstart + blockno, buf);
-    
+
+    // 标记为空闲
+    if (block_bitmap_set_free(bno) < 0)
+    {
+        Error("free_block: failed to free block %d", bno);
+        return;
+    }
+
+    zero_block(bno); // 清零块内容
     Log("free_block: block %d freed", bno);
 }
 

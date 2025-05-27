@@ -129,7 +129,7 @@ uint bitmap_find_free(bitmap_type_t type)
 
                         if (item_num >= max_items)
                         {
-                            return 0; // 超出范围，返回0表示未找到
+                            return -1; // 超出范围，返回0表示未找到
                         }
 
                         return item_num;
@@ -139,7 +139,7 @@ uint bitmap_find_free(bitmap_type_t type)
         }
     }
 
-    return 0; // 未找到空闲项
+    return -1; // 未找到空闲项
 }
 
 // 统计已使用的项数
