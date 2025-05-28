@@ -7,6 +7,7 @@
 #include "fs.h"
 #include "inode.h"
 #include "mintest.h"
+#include "log.h"
 
 static void format()
 {
@@ -76,6 +77,7 @@ mt_test(test_cmd_mk_invalid)
 
 mt_test(test_cmd_mkdir)
 {
+    Log("test_cmd_mkdir: starting test");
     format();
     mt_assert(cmd_mkdir("mydir", 0b1111) == E_SUCCESS);
 
@@ -87,6 +89,7 @@ mt_test(test_cmd_mkdir)
 
 mt_test(test_cmd_mkdir_invalid)
 {
+    Log("test_cmd_mkdir_invalid: starting test");
     format();
     mt_assert(cmd_mkdir("mydir", 0b1111) == E_SUCCESS);
     mt_assert(cmd_mkdir("mydir", 0b1111) == E_ERROR);
@@ -95,6 +98,7 @@ mt_test(test_cmd_mkdir_invalid)
 
 mt_test(test_cmd_cd_absolute)
 {
+    Log("test_cmd_cd_absolute: starting test");
     format();
     cmd_mkdir("mydir", 0b1111);
     mt_assert(cmd_cd("/mydir") == E_SUCCESS);
@@ -219,6 +223,7 @@ mt_test(test_folder_tree_operations)
     entry *entries;
     int n;
     cmd_ls(&entries, &n);
+    Log("test_folder_tree_operations: found %d entries in %s", n, path);    
     mt_assert(n == 0);
     free(entries);
 
@@ -243,10 +248,12 @@ mt_test(test_folder_tree_with_rm)
     int idx_dir = rand() % 3;
     int idx_file = rand() % 3;
 
+    Log("test_folder_tree_with_rm: removing %s ", dirs[idx_dir]);
     mt_assert(cmd_rmdir(dirs[idx_dir]) == E_SUCCESS);
     mt_assert(!exist(dirs[idx_dir], T_DIR));
 
     mt_assert(cmd_rm(files[idx_file]) == E_SUCCESS);
+    Log("test_folder_tree_with_rm: removed %s ", files[idx_file]);
     mt_assert(!exist(files[idx_file], T_FILE));
 
     for (int i = 0; i < 3; i++)
@@ -271,12 +278,12 @@ void fs_tests()
     mt_run_test(test_cmd_mk_invalid);
     mt_run_test(test_cmd_mkdir);
     mt_run_test(test_cmd_mkdir_invalid);
-    // mt_run_test(test_cmd_cd_absolute);
-    // mt_run_test(test_cmd_cd_relative);
-    // mt_run_test(test_cmd_rm);
-    // mt_run_test(test_cmd_rmdir_with_files);
-    // mt_run_test(test_file_lifecycle);
-    // mt_run_test(test_small_file_ops);
-    // mt_run_test(test_folder_tree_operations);
-    // mt_run_test(test_folder_tree_with_rm);
+    mt_run_test(test_cmd_cd_absolute);
+    mt_run_test(test_cmd_cd_relative);
+    mt_run_test(test_cmd_rm);
+    mt_run_test(test_cmd_rmdir_with_files);
+    mt_run_test(test_file_lifecycle);
+    mt_run_test(test_small_file_ops);
+    mt_run_test(test_folder_tree_operations);
+    mt_run_test(test_folder_tree_with_rm);
 }

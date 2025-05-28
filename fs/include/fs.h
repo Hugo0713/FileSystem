@@ -41,8 +41,15 @@ int add_entry_to_directory(uint dir_inum, char *filename, uint file_inum, short 
 int cmd_mk(char *name, short mode);                                                         // Create a new file
 int cmd_mkdir(char *name, short mode);                                                      // Create a new directory
 
+int remove_entry_from_directory(uint dir_inum, char *filename);
+int is_directory_empty(uint dir_inum);
+void free_file_blocks(inode *ip);
+
 int cmd_rm(char *name);
 int cmd_rmdir(char *name);
+
+uint resolve_absolute_path(char *path);
+uint get_parent_directory(uint dir_inum);
 
 int cmd_cd(char *name);
 int cmd_ls(entry **entries, int *n);
