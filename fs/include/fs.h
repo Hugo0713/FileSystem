@@ -21,8 +21,6 @@ extern uint current_uid; // Current user ID
 void sbinit();
 
 void init_sb(int size);        // Initialize superblock with given size
-void init_data_bitmap();       // Initialize data block bitmap
-void init_inode_bitmap();      // Initialize inode bitmap
 int init_directory_entries(uint dir_inum, uint parent_inum, uint data_block, short mode); // Initialize directory entries
 void init_root_directory();    // Initialize root directory
 

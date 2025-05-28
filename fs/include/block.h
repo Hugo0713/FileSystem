@@ -38,4 +38,6 @@ void get_disk_info(int *ncyl, int *nsec);
 void read_block(int blockno, uchar *buf);
 void write_block(int blockno, uchar *buf);
 
+int init_block_bitmap();
+
 #endif

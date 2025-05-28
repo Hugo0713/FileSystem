@@ -62,7 +62,7 @@ inode *iget(uint inum)
 
 void free_inode_blocks(inode *ip)
 {
-    uint block_count = 0;  // 记录释放的块数
+    uint block_count = 0; // 记录释放的块数
     // 释放直接块
     for (int i = 0; i < NDIRECT; i++)
     {
@@ -122,9 +122,9 @@ void free_inode_blocks(inode *ip)
         free_block(ip->addrs[NDIRECT + 1]);
         block_count++; // 二级间接块本身
     }
-    
+
     ip->size = 0;
-    ip->blocks = 0;  // 重置块计数
+    ip->blocks = 0; // 重置块计数
     Log("free_inode_blocks: freed %d blocks from inode %d", block_count, ip->inum);
 }
 
@@ -193,7 +193,7 @@ void init_inode(inode *ip, uint inum, short type)
     ip->type = type;
     ip->uid = 0; // 可以根据需要设置为当前用户ID
     ip->size = 0;
-    ip->dirty = 1; // 标记为脏，需要写回磁盘
+    ip->dirty = 1;  // 标记为脏，需要写回磁盘
     ip->blocks = 0; // 初始化块计数为0
 
     switch (type)
@@ -315,7 +315,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加块计数
+            ip->blocks++; // 增加块计数
             ip->dirty = 1;
         }
         return addr;
@@ -334,7 +334,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加间接块计数
+            ip->blocks++; // 增加间接块计数
             ip->dirty = 1;
         }
 
@@ -349,7 +349,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加数据块计数
+            ip->blocks++; // 增加数据块计数
             write_block(ip->addrs[NDIRECT], buf);
         }
         return addr;
@@ -367,7 +367,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加二级间接块计数
+            ip->blocks++; // 增加二级间接块计数
             ip->dirty = 1;
         }
 
@@ -382,7 +382,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加一级间接块计数
+            ip->blocks++; // 增加一级间接块计数
             write_block(ip->addrs[NDIRECT + 1], buf);
         }
 
@@ -397,7 +397,7 @@ uint bmap(inode *ip, uint bn)
             {
                 return 0;
             }
-            ip->blocks++;  // 增加数据块计数
+            ip->blocks++; // 增加数据块计数
             write_block(ip->addrs[NDIRECT + 1], buf);
         }
         return addr;
@@ -521,4 +521,40 @@ int writei(inode *ip, uchar *src, uint off, uint n)
     Log("writei: successfully wrote %d bytes to inode %d", total, ip->inum);
     iupdate(ip);
     return total;
+}
+
+int init_inode_system()
+{
+    // 清空 inode 位图
+    if (bitmap_clear_all(BITMAP_INODE) < 0)
+    {
+        Error("init_inode_system: failed to clear inode bitmap");
+        return -1;
+    }
+
+    // 初始化所有 inode 为未使用状态
+    dinode empty_inode;
+    memset(&empty_inode, 0, sizeof(empty_inode));
+    empty_inode.type = T_UNUSED;
+
+    // 创建包含空 inode 的缓冲区
+    uchar buf[BSIZE];
+    memset(buf, 0, BSIZE);
+    for (int i = 0; i < BSIZE / sizeof(dinode); i++)
+    {
+        memcpy(buf + i * sizeof(dinode), &empty_inode, sizeof(dinode));
+    }
+
+    // 计算需要多少个块来存储所有 inode
+    uint inodes_per_block = BSIZE / sizeof(dinode);
+    uint inode_blocks = (sb.ninodes + inodes_per_block - 1) / inodes_per_block;
+
+    // 写入所有 inode 块
+    for (uint i = 0; i < inode_blocks; i++)
+    {
+        write_block(sb.inodestart + i, buf);
+    }
+
+    Log("Inode system initialized successfully");
+    return 0;
 }

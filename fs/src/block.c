@@ -96,3 +96,22 @@ void write_block(int blockno, uchar *buf)
     // Write the block to disk
     memcpy(ramdisk + blockno * BSIZE, buf, BSIZE);
 }
+
+int init_block_bitmap()
+{
+    // 清空所有数据块位图
+    if (bitmap_clear_all(BITMAP_BLOCK) < 0)
+    {
+        Error("init_block_bitmap: failed to clear block bitmap");
+        return -1;
+    }
+    // 标记系统块为已使用
+    if (bitmap_set_system_blocks_used() < 0)
+    {
+        Error("init_block_bitmap: failed to mark system blocks");
+        return -1;
+    }
+
+    Log("Block bitmap initialized successfully");
+    return 0;
+}

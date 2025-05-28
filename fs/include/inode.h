@@ -72,4 +72,5 @@ int readi(inode *ip, uchar *dst, uint off, uint n);
 // Write to an inode (returns bytes written or -1 on error)
 int writei(inode *ip, uchar *src, uint off, uint n);
 
+int init_inode_system(); // Initialize the inode system
 #endif

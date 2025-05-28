@@ -6,7 +6,6 @@
 
 #include "block.h"
 #include "log.h"
-#include "bitmap.h"
 
 uint current_dir = 0; // 当前目录的 inode 编号
 uint current_uid = 0; // 当前用户的 UID
@@ -62,58 +61,6 @@ void init_sb(int size)
     Log("Superblock initialized successfully");
 }
 
-// 初始化数据块位图
-void init_data_bitmap()
-{
-    if (bitmap_clear_all(BITMAP_BLOCK) < 0)
-    {
-        Error("init_data_bitmap: failed to clear data bitmap");
-        return;
-    }
-
-    if (bitmap_set_system_blocks_used() < 0)
-    {
-        Error("init_data_bitmap: failed to mark system blocks");
-        return;
-    }
-
-    Log("Data bitmap initialized successfully using bitmap functions");
-}
-
-// 初始化 inode 位图和 inode 区域
-void init_inode_bitmap()
-{
-    if (bitmap_clear_all(BITMAP_INODE) < 0)
-    {
-        Error("init_inode_bitmap: failed to clear inode bitmap");
-        return;
-    }
-
-    // 初始化所有 inode 为未使用状态
-    dinode empty_inode;
-    memset(&empty_inode, 0, sizeof(empty_inode));
-    empty_inode.type = T_UNUSED;
-
-    // 创建包含空 inode 的缓冲区
-    uchar buf[BSIZE];
-    memset(buf, 0, BSIZE);
-    for (int i = 0; i < BSIZE / sizeof(dinode); i++)
-    {
-        memcpy(buf + i * sizeof(dinode), &empty_inode, sizeof(dinode));
-    }
-
-    // 计算需要多少个块来存储所有 inode
-    uint inodes_per_block = BSIZE / sizeof(dinode);
-    uint inode_blocks = (sb.ninodes + inodes_per_block - 1) / inodes_per_block;
-
-    // 写入所有 inode 块
-    for (uint i = 0; i < inode_blocks; i++)
-    {
-        write_block(sb.inodestart + i, buf);
-    }
-    Log("Inode bitmap and inode area initialized successfully using bitmap functions");
-}
-
 // 初始化目录内容（创建 "." 和 ".." 条目）
 int init_directory_entries(uint dir_inum, uint parent_inum, uint data_block, short mode)
 {
@@ -150,60 +97,49 @@ int init_directory_entries(uint dir_inum, uint parent_inum, uint data_block, sho
 // 初始化根目录
 void init_root_directory()
 {
-    uchar buf[BSIZE];
-    // 创建根目录（inode 0）
-    dinode root_inode;
-    memset(&root_inode, 0, sizeof(root_inode));
-    root_inode.type = T_DIR;
-    root_inode.mode = 0755;
-    root_inode.nlink = 2;                // 根目录至少有两个链接（. 和 ..）
-    root_inode.uid = 0;                  // 假设 UID 为 0（root 用户）
-    root_inode.size = 2 * sizeof(entry); // 根目录包含两个条目（. 和 ..）
-    root_inode.dirty = 1;
+    // 创建根目录 inode
+    inode *root_ip = ialloc(T_DIR);
+    if (root_ip == NULL)
+    {
+        Error("init_root_directory: failed to allocate root inode");
+        return;
+    }
 
-    // 为根目录分配一个数据块
-    uint root_data_block = block_bitmap_find_free();
+    // 强制设置为 inode 0（根目录特殊情况）
+    root_ip->type = T_DIR;
+    root_ip->inum = 0;
+    root_ip->mode = 0755;
+    root_ip->nlink = 2;         // 根目录至少有两个链接（"." 和 ".."）
+    root_ip->uid = current_uid; // 设置为当前用户 ID
+    root_ip->size = 2 * sizeof(entry);
+    root_ip->blocks = 1; // 根目录至少有一个数据块
+    root_ip->dirty = 1;  // 标记为脏，需要写回磁盘
+
+    // 为根目录分配数据块 - 通过 allocate_block
+    uint root_data_block = allocate_block();
     if (root_data_block == 0)
     {
-        Error("init_root_directory: no free blocks available for root directory");
+        Error("init_root_directory: failed to allocate data block");
+        iput(root_ip);
         return;
     }
-    root_inode.addrs[0] = root_data_block;
+    root_ip->addrs[0] = root_data_block;
 
-    // 将根目录 inode 写入磁盘
-    read_block(sb.inodestart, buf);
-    memcpy(buf, &root_inode, sizeof(dinode));
-    write_block(sb.inodestart, buf);
+    iupdate(root_ip);
 
-    // 使用位图函数标记根目录 inode 为已使用
-    if (inode_bitmap_set_used(0) < 0)
-    {
-        Error("init_root_directory: failed to mark root inode as used");
-        return;
-    }
+    // 初始化目录内容
+    init_directory_entries(0, 0, root_data_block, 0755);
 
-    // 使用位图函数标记根目录数据块为已使用
-    if (block_bitmap_set_used(root_data_block) < 0)
-    {
-        Error("init_root_directory: failed to mark root data block as used");
-        return;
-    }
-
-    // 初始化根目录内容（根目录的父目录是自己）
-    if (init_directory_entries(0, 0, root_data_block, 0755) < 0)
-    {
-        Error("init_root_directory: failed to initialize directory entries");
-        return;
-    }
-    Log("Root directory initialized successfully using bitmap functions");
+    iput(root_ip);
+    Log("Root directory initialized successfully");
 }
 
 int cmd_f(int ncyl, int nsec)
 {
     int size = ncyl * nsec;
     init_sb(size);         // 初始化超级块
-    init_data_bitmap();    // 初始化数据块位图
-    init_inode_bitmap();   // 初始化inode位图和inode区域
+    init_block_bitmap();    // 初始化数据块位图
+    init_inode_system();   // 初始化inode位图和inode区域
     init_root_directory(); // 初始化根目录
 
     // 初始化日志区域（清零）
@@ -505,7 +441,7 @@ int cmd_mkdir(char *name, short mode)
     ip->dirty = 1;
 
     // 为新目录分配数据块
-    uint dir_data_block = block_bitmap_find_free();
+    uint dir_data_block = allocate_block();
     if (dir_data_block == 0)
     {
         Error("cmd_mkdir: no free blocks available for directory '%s'", name);
@@ -514,21 +450,13 @@ int cmd_mkdir(char *name, short mode)
     }
     ip->addrs[0] = dir_data_block;
 
-    // 标记数据块为已使用
-    if (block_bitmap_set_used(dir_data_block) < 0)
-    {
-        Error("cmd_mkdir: failed to mark data block as used");
-        iput(ip);
-        return E_ERROR;
-    }
-
     iupdate(ip);
 
     // 初始化目录内容
     if (init_directory_entries(ip->inum, current_dir, dir_data_block, mode) < 0)
     {
         Error("cmd_mkdir: failed to initialize directory entries");
-        block_bitmap_set_free(dir_data_block);
+        free_block(dir_data_block);
         iput(ip);
         return E_ERROR;
     }
@@ -538,7 +466,7 @@ int cmd_mkdir(char *name, short mode)
     if (result < 0)
     {
         Error("cmd_mkdir: failed to add directory to parent");
-        block_bitmap_set_free(dir_data_block);
+        free_block(dir_data_block);
         iput(ip);
         return E_ERROR;
     }
