@@ -15,6 +15,9 @@ typedef struct
     char name[MAXNAME];
 } entry; // 32 bytes, 16 entries per block
 
+extern uint current_dir; // Current directory inode number
+extern uint current_uid; // Current user ID
+
 void sbinit();
 
 void init_sb(int size);        // Initialize superblock with given size

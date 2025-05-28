@@ -8,9 +8,8 @@
 #include "log.h"
 #include "bitmap.h"
 
-superblock sb;
-static int current_uid = 0;  // 当前用户 ID
-static uint current_dir = 0; // 当前目录
+uint current_dir = 0; // 当前目录的 inode 编号
+uint current_uid = 0; // 当前用户的 UID
 
 void sbinit()
 {
@@ -216,8 +215,7 @@ int cmd_f(int ncyl, int nsec)
     }
 
     Log("File system formatted successfully");
-    Log("Total blocks: %d, Data blocks: %d, Inodes: %d",
-        sb.size, sb.ndatablocks, sb.ninodes);
+    Log("Total blocks: %d, Data blocks: %d, Inodes: %d", sb.size, sb.ndatablocks, sb.ninodes);
     return E_SUCCESS;
 }
 

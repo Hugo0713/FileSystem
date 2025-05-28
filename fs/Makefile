@@ -83,10 +83,10 @@ $(BUILD_DIR)/lib/%.o: ../lib/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILD_DIR) $(EXES)
+	rm -rf $(BUILD_DIR) $(EXES) *.log
 
 OBJS = $(foreach exe,$(EXES),$($(exe)_OBJS)) $(LIB_OBJS)
 DEPS = $(OBJS:.o=.d)
 -include $(DEPS)
 
-.PHONY: all clean run test
+.PHONY: all clean run test test-block test-inode test-fs

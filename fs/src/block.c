@@ -19,7 +19,7 @@ void zero_block(uint bno)
 uint allocate_block()
 {
     uint bno = block_bitmap_find_free();
-    if (bno == -1)
+    if (bno == 0)
     {
         Error("alloc_block: no free blocks available");
         return 0;
@@ -77,22 +77,22 @@ void get_disk_info(int *ncyl, int *nsec)
 
 void read_block(int blockno, uchar *buf)
 {
-    if (blockno < 0 || blockno >= sb.size)
-    {
-        Error("read_block: blockno %d out of range", blockno);
-        return;
-    }
+    // if (blockno < 0 || blockno >= sb.size)
+    // {
+    //     Error("read_block: blockno %d out of range", blockno);
+    //     return;
+    // }
     // Read the block from disk
     memcpy(buf, ramdisk + blockno * BSIZE, BSIZE);
 }
 
 void write_block(int blockno, uchar *buf)
 {
-    if (blockno < 0 || blockno >= sb.size)
-    {
-        Error("write_block: blockno %d out of range", blockno);
-        return;
-    }
+    // if (blockno < 0 || blockno >= sb.size)
+    // {
+    //     Error("write_block: blockno %d out of range", blockno);
+    //     return;
+    // }
     // Write the block to disk
     memcpy(ramdisk + blockno * BSIZE, buf, BSIZE);
 }

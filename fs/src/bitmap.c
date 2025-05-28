@@ -16,7 +16,7 @@ static void get_bitmap_info(bitmap_type_t type, uint *start_block, uint *num_blo
     case BITMAP_BLOCK:
         *start_block = sb.bmapstart;
         *num_blocks = sb.bmapblocks;
-        *max_items = sb.size - sb.datastart;
+        *max_items = sb.size;
         break;
     }
 }
@@ -166,6 +166,10 @@ int bitmap_set_system_blocks_used(void)
             Error("bitmap_set_system_blocks_used: failed to mark block %d", i);
             return -1;
         }
+        // else
+        // {
+        //     Log("bitmap_set_system_blocks_used: marked block %d as used", i);
+        // }
     }
 
     Log("bitmap_set_system_blocks_used: marked %d system blocks as used", sb.datastart);

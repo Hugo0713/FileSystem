@@ -14,7 +14,7 @@ typedef unsigned int uint;
 #define RATE 50          // Rate of log blocks to total blocks
 
 #define MAXNAME 18
-#define MAXBLOCK (BSIZE * BSIZE)
+#define MAXBLOCK (BSIZE * NCYL * NSEC) // Maximum number of blocks in the filesystem
 
 // bits per block
 #define BPB (BSIZE * 8)
