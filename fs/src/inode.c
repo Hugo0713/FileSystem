@@ -172,8 +172,9 @@ void iput(inode *ip)
         clear_disk_inode(ip->inum);     // 清零磁盘上的inode
     }
     // 释放内存
+    uint inum = ip->inum;
     free(ip);
-    Log("iput: inode %d released", ip->inum);
+    Log("iput: inode %d released", inum);
 }
 
 void init_inode(inode *ip, uint inum, short type)
