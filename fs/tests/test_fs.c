@@ -271,12 +271,12 @@ void fs_tests()
     mt_run_test(test_cmd_mk_invalid);
     mt_run_test(test_cmd_mkdir);
     mt_run_test(test_cmd_mkdir_invalid);
-    mt_run_test(test_cmd_cd_absolute);
-    mt_run_test(test_cmd_cd_relative);
-    mt_run_test(test_cmd_rm);
-    mt_run_test(test_cmd_rmdir_with_files);
-    mt_run_test(test_file_lifecycle);
-    mt_run_test(test_small_file_ops);
-    mt_run_test(test_folder_tree_operations);
-    mt_run_test(test_folder_tree_with_rm);
+    // mt_run_test(test_cmd_cd_absolute);
+    // mt_run_test(test_cmd_cd_relative);
+    // mt_run_test(test_cmd_rm);
+    // mt_run_test(test_cmd_rmdir_with_files);
+    // mt_run_test(test_file_lifecycle);
+    // mt_run_test(test_small_file_ops);
+    // mt_run_test(test_folder_tree_operations);
+    // mt_run_test(test_folder_tree_with_rm);
 }

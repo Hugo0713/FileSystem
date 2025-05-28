@@ -3,12 +3,6 @@
 
 #include "common.h"
 
-#define NDIRECT 10 // Direct blocks, you can change this value
-
-#define APB (BSIZE / sizeof(uint))           // Address per block 128
-#define MAXFILEB (NDIRECT + APB + APB * APB) // Maximum file size in blocks 16522
-#define MAXFILE (MAXFILEB * BSIZE)           // Maximum file size in bytes (8MB)
-
 enum
 {
     T_UNUSED = 0, // Unused
@@ -56,7 +50,6 @@ void clear_disk_inode(uint inum);
 void iput(inode *ip);
 
 void init_inode(inode *ip, uint inum, short type);
-uint find_free_inode();
 int mark_inode_used(uint inum);
 // Allocate a new inode of specified type (returns allocated inode or NULL)
 // Don't forget to use iput()
@@ -72,5 +65,5 @@ int readi(inode *ip, uchar *dst, uint off, uint n);
 // Write to an inode (returns bytes written or -1 on error)
 int writei(inode *ip, uchar *src, uint off, uint n);
 
-int init_inode_system(); // Initialize the inode system
+void init_inode_system(); // Initialize the inode system
 #endif

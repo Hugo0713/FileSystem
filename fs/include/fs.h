@@ -26,11 +26,13 @@ void init_root_directory();    // Initialize root directory
 
 int cmd_f(int ncyl, int nsec); // Format the filesystem
 
-uint find_entry_in_directory(uint dir_inum, char *name, short entry_type); // Find an entry in a directory
-uint search_directory_block(uint block_addr, char *name, short entry_type); // Search a directory block for an entry
-uint search_indirect_block(uint indirect_addr, char *name, short entry_type); // Search an indirect block for an entry
-uint search_double_indirect_block(uint double_indirect_addr, char *name, short entry_type); // Search a double indirect block for an entry
+uint search_directory_block(uint block_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count);
+uint search_indirect_block(uint indirect_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count);
+uint search_double_indirect_block(uint double_indirect_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count);
+int collect_directory_entries(uint dir_inum, entry *entries_array, uint max_entries, uint *count);
 
+
+uint find_entry_in_directory(uint dir_inum, char *name, short entry_type);
 uint find_file_in_directory(uint dir_inum, char *filename); // Find a file in a directory
 uint find_file_only(uint dir_inum, char *filename); // Find a file only
 uint find_directory_only(uint dir_inum, char *dirname); // Find a directory only

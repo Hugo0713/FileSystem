@@ -101,7 +101,7 @@ int bitmap_set(bitmap_type_t type, uint item_num, int used)
 }
 
 // 查找第一个空闲项
-uint bitmap_find_free(bitmap_type_t type)
+int bitmap_find_free(bitmap_type_t type)
 {
     uint start_block, num_blocks, max_items;
     get_bitmap_info(type, &start_block, &num_blocks, &max_items);
@@ -123,17 +123,15 @@ uint bitmap_find_free(bitmap_type_t type)
 
                         if (item_num >= max_items)
                         {
-                            return 0; // 超出范围，返回0表示未找到
+                            return -1; // 超出范围，返回0表示未找到
                         }
-
                         return item_num;
                     }
                 }
             }
         }
     }
-
-    return 0; // 未找到空闲项
+    return -1; // 未找到空闲项
 }
 
 // 清空整个位图（设置为全0）

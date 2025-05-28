@@ -13,9 +13,8 @@ typedef enum
 // 基本位图操作
 int bitmap_is_used(bitmap_type_t type, uint item_num);
 int bitmap_set(bitmap_type_t type, uint item_num, int used);
-uint bitmap_find_free(bitmap_type_t type);
-uint bitmap_count_used(bitmap_type_t type);
-int bitmap_set_range(bitmap_type_t type, uint start_item, uint count, int used);
+int bitmap_find_free(bitmap_type_t type);
+
 
 // 便捷的包装函数
 static inline int inode_bitmap_is_used(uint inum)
@@ -30,7 +29,7 @@ static inline int inode_bitmap_set_free(uint inum)
 {
     return bitmap_set(BITMAP_INODE, inum, 0);
 }
-static inline uint inode_bitmap_find_free(void)
+static inline int inode_bitmap_find_free(void)
 {
     return bitmap_find_free(BITMAP_INODE);
 }
@@ -48,7 +47,7 @@ static inline int block_bitmap_set_free(uint bno)
 {
     return bitmap_set(BITMAP_BLOCK, bno, 0);
 }
-static inline uint block_bitmap_find_free(void)
+static inline int block_bitmap_find_free(void)
 {
     return bitmap_find_free(BITMAP_BLOCK);
 }

@@ -209,13 +209,7 @@ void init_inode(inode *ip, uint inum, short type)
         break;
     }
 
-    Log("init_inode: initialized inode %d (type=%d, mode=%o, nlink=%d)",
-        inum, type, ip->mode, ip->nlink);
-}
-
-uint find_free_inode()
-{
-    return inode_bitmap_find_free();
+    Log("init_inode: initialized inode %d (type=%d, mode=%o, nlink=%d)", inum, type, ip->mode, ip->nlink);
 }
 
 int mark_inode_used(uint inum)
@@ -237,8 +231,8 @@ int mark_inode_used(uint inum)
 
 inode *ialloc(short type)
 {
-    uint inum = find_free_inode();
-    if (inum == 0)
+    int inum = inode_bitmap_find_free();
+    if (inum == -1)
     {
         Error("ialloc: no free inodes available");
         return NULL;
@@ -523,7 +517,7 @@ int writei(inode *ip, uchar *src, uint off, uint n)
     return total;
 }
 
-int init_inode_system()
+void init_inode_system()
 {
     // 清空 inode 位图
     if (bitmap_clear_all(BITMAP_INODE) < 0)
@@ -556,5 +550,4 @@ int init_inode_system()
     }
 
     Log("Inode system initialized successfully");
-    return 0;
 }

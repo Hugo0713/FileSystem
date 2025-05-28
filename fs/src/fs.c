@@ -138,7 +138,7 @@ int cmd_f(int ncyl, int nsec)
 {
     int size = ncyl * nsec;
     init_sb(size);         // 初始化超级块
-    init_block_bitmap();    // 初始化数据块位图
+    init_block_bitmap();   // 初始化数据块位图
     init_inode_system();   // 初始化inode位图和inode区域
     init_root_directory(); // 初始化根目录
 
@@ -155,7 +155,111 @@ int cmd_f(int ncyl, int nsec)
     return E_SUCCESS;
 }
 
-// 在目录中查找指定类型的文件/目录
+// 在单个目录数据块中搜索/收集条目
+uint search_directory_block(uint block_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count)
+{
+    uchar buf[BSIZE];
+    read_block(block_addr, buf);
+
+    uint offset = 0;
+    while (offset + sizeof(entry) <= BSIZE)
+    {
+        entry *current_entry = (entry *)(buf + offset);
+        // 检查条目是否有效
+        if (current_entry->inum != 0)
+        {
+            if (name != NULL) // 查找模式（name != NULL）
+            {
+                if (strcmp(current_entry->name, name) == 0)
+                { // 检查类型匹配（如果指定了类型）
+                    if (entry_type == -1 || current_entry->type == entry_type)
+                    {
+                        Log("search_directory_block: found '%s' (inode %d, type %d)", name, current_entry->inum, current_entry->type);
+                        return current_entry->inum;
+                    }
+                }
+            }
+            // 收集模式（entries_array != NULL）
+            else if (entries_array != NULL && current_count != NULL && *current_count < max_entries)
+            {
+                memcpy(&entries_array[*current_count], current_entry, sizeof(entry));
+                (*current_count)++;
+                Log("search_directory_block: collected entry '%s' (inode %d, type %d)", current_entry->name, current_entry->inum, current_entry->type);
+            }
+        }
+        offset += sizeof(entry);
+    }
+    return 0; // 查找模式下未找到
+}
+
+// 在一级间接块中搜索/收集条目
+uint search_indirect_block(uint indirect_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count)
+{
+    if (indirect_addr == 0)
+    {
+        return 0;
+    }
+
+    uchar buf[BSIZE];
+    read_block(indirect_addr, buf);
+    uint *block_addrs = (uint *)buf;
+
+    for (int i = 0; i < APB; i++)
+    {
+        if (block_addrs[i] != 0)
+        {
+            if (name != NULL) // 查找模式
+            {
+                uint found_inum = search_directory_block(block_addrs[i], name, entry_type, NULL, 0, NULL);
+                if (found_inum != 0)
+                {
+                    return found_inum;
+                }
+            }
+            // 收集模式
+            else if (entries_array != NULL && current_count != NULL && *current_count < max_entries)
+            {
+                search_directory_block(block_addrs[i], NULL, -1, entries_array, max_entries, current_count);
+            }
+        }
+    }
+    return 0;
+}
+
+// 在二级间接块中搜索/收集条目
+uint search_double_indirect_block(uint double_indirect_addr, char *name, short entry_type, entry *entries_array, uint max_entries, uint *current_count)
+{
+    if (double_indirect_addr == 0)
+    {
+        return 0;
+    }
+
+    uchar buf[BSIZE];
+    read_block(double_indirect_addr, buf);
+    uint *level1_addrs = (uint *)buf;
+    for (int i = 0; i < APB; i++)
+    {
+        if (level1_addrs[i] != 0)
+        {
+            if (name != NULL) // 查找模式
+            {
+                uint found_inum = search_indirect_block(level1_addrs[i], name, entry_type, NULL, 0, NULL);
+                if (found_inum != 0)
+                {
+                    return found_inum;
+                }
+            }
+            // 收集模式
+            else if (entries_array != NULL && current_count != NULL && *current_count < max_entries)
+            {
+                search_indirect_block(level1_addrs[i], NULL, -1, entries_array, max_entries, current_count);
+            }
+        }
+    }
+    return 0;
+}
+
+// 在目录中查找指定名称的条目
 uint find_entry_in_directory(uint dir_inum, char *name, short entry_type)
 {
     if (name == NULL || strlen(name) == 0)
@@ -173,9 +277,11 @@ uint find_entry_in_directory(uint dir_inum, char *name, short entry_type)
             iput(dir_ip);
         return 0;
     }
+
     Log("find_entry_in_directory: searching for '%s' (type %d) in directory %d", name, entry_type, dir_inum);
 
     uint found_inum = 0;
+
     // 遍历目录的所有地址块
     for (int addr_index = 0; addr_index < NDIRECT + 2 && found_inum == 0; addr_index++)
     {
@@ -183,21 +289,21 @@ uint find_entry_in_directory(uint dir_inum, char *name, short entry_type)
         {
             if (dir_ip->addrs[addr_index] != 0)
             {
-                found_inum = search_directory_block(dir_ip->addrs[addr_index], name, entry_type);
+                found_inum = search_directory_block(dir_ip->addrs[addr_index], name, entry_type, NULL, 0, NULL);
             }
         }
         else if (addr_index == NDIRECT) // 一级间接块
         {
             if (dir_ip->addrs[NDIRECT] != 0)
             {
-                found_inum = search_indirect_block(dir_ip->addrs[NDIRECT], name, entry_type);
+                found_inum = search_indirect_block(dir_ip->addrs[NDIRECT], name, entry_type, NULL, 0, NULL);
             }
         }
         else // 二级间接块
         {
             if (dir_ip->addrs[NDIRECT + 1] != 0)
             {
-                found_inum = search_double_indirect_block(dir_ip->addrs[NDIRECT + 1], name, entry_type);
+                found_inum = search_double_indirect_block(dir_ip->addrs[NDIRECT + 1], name, entry_type, NULL, 0, NULL);
             }
         }
     }
@@ -214,80 +320,54 @@ uint find_entry_in_directory(uint dir_inum, char *name, short entry_type)
     return found_inum;
 }
 
-// 在单个目录数据块中搜索指定条目
-uint search_directory_block(uint block_addr, char *name, short entry_type)
+// 收集目录中的所有条目
+int collect_directory_entries(uint dir_inum, entry *entries_array, uint max_entries, uint *count)
 {
-    uchar buf[BSIZE];
-    read_block(block_addr, buf);
-
-    uint offset = 0;
-    while (offset + sizeof(entry) <= BSIZE)
+    if (entries_array == NULL || count == NULL)
     {
-        entry *current_entry = (entry *)(buf + offset);
-        // 检查条目是否有效且名字匹配
-        if (current_entry->inum != 0 && strcmp(current_entry->name, name) == 0)
+        Error("collect_directory_entries: invalid parameters");
+        return -1;
+    }
+
+    // 获取目录 inode
+    inode *dir_ip = iget(dir_inum);
+    if (dir_ip == NULL || dir_ip->type != T_DIR)
+    {
+        Error("collect_directory_entries: invalid directory inode %d", dir_inum);
+        if (dir_ip)
+            iput(dir_ip);
+        return -1;
+    }
+    Log("collect_directory_entries: collecting entries from directory %d", dir_inum);
+
+    *count = 0;
+    // 遍历目录的所有地址块
+    for (int addr_index = 0; addr_index < NDIRECT + 2 && *count < max_entries; addr_index++)
+    {
+        if (addr_index < NDIRECT) // 直接块
         {
-            // 检查类型匹配（如果指定了类型）
-            if (entry_type == -1 || current_entry->type == entry_type)
+            if (dir_ip->addrs[addr_index] != 0)
             {
-                Log("search_directory_block: found '%s' (inode %d, type %d)", name, current_entry->inum, current_entry->type);
-                return current_entry->inum;
+                search_directory_block(dir_ip->addrs[addr_index], NULL, -1, entries_array, max_entries, count);
             }
         }
-        offset += sizeof(entry);
-    }
-    return 0;
-}
-
-// 在一级间接块中搜索指定条目
-uint search_indirect_block(uint indirect_addr, char *name, short entry_type)
-{
-    if (indirect_addr == 0)
-    {
-        return 0;
-    }
-
-    uchar buf[BSIZE];
-    read_block(indirect_addr, buf);
-    uint *block_addrs = (uint *)buf;
-
-    for (int i = 0; i < APB; i++)
-    {
-        if (block_addrs[i] != 0)
+        else if (addr_index == NDIRECT) // 一级间接块
         {
-            uint found_inum = search_directory_block(block_addrs[i], name, entry_type);
-            if (found_inum != 0)
+            if (dir_ip->addrs[NDIRECT] != 0)
             {
-                return found_inum;
+                search_indirect_block(dir_ip->addrs[NDIRECT], NULL, -1, entries_array, max_entries, count);
             }
         }
-    }
-    return 0;
-}
-
-// 在二级间接块中搜索指定条目
-uint search_double_indirect_block(uint double_indirect_addr, char *name, short entry_type)
-{
-    if (double_indirect_addr == 0)
-    {
-        return 0;
-    }
-
-    uchar buf[BSIZE];
-    read_block(double_indirect_addr, buf);
-    uint *level1_addrs = (uint *)buf;
-
-    for (int i = 0; i < APB; i++)
-    {
-        if (level1_addrs[i] != 0)
+        else // 二级间接块
         {
-            uint found_inum = search_indirect_block(level1_addrs[i], name, entry_type);
-            if (found_inum != 0)
+            if (dir_ip->addrs[NDIRECT + 1] != 0)
             {
-                return found_inum;
+                search_double_indirect_block(dir_ip->addrs[NDIRECT + 1], NULL, -1, entries_array, max_entries, count);
             }
         }
     }
+    iput(dir_ip);
+    Log("collect_directory_entries: collected %d entries from directory %d", *count, dir_inum);
     return 0;
 }
 
@@ -491,6 +571,74 @@ int cmd_cd(char *name)
 }
 int cmd_ls(entry **entries, int *n)
 {
+    if (entries == NULL || n == NULL)
+    {
+        Error("cmd_ls: invalid output parameters");
+        return E_ERROR;
+    }
+    Log("cmd_ls: listing directory %d", current_dir);
+
+    // 获取当前目录 inode
+    inode *dir_ip = iget(current_dir);
+    if (dir_ip == NULL)
+    {
+        Error("cmd_ls: failed to get current directory inode %d", current_dir);
+        return E_ERROR;
+    }
+    if (dir_ip->type != T_DIR)
+    {
+        Error("cmd_ls: current inode %d is not a directory", current_dir);
+        iput(dir_ip);
+        return E_ERROR;
+    }
+
+    // 检查目录是否为空
+    if (dir_ip->size == 0)
+    {
+        Log("cmd_ls: directory is empty");
+        *entries = NULL;
+        *n = 0;
+        iput(dir_ip);
+        return E_SUCCESS;
+    }
+    iput(dir_ip); // 释放 dir_ip，collect_directory_entries 会重新获取
+
+    // 使用较大的临时数组，足够存储目录中的所有条目
+    uint max_possible_entries = MAXFILEB * (BSIZE / sizeof(entry));
+    entry *temp_entries = malloc(max_possible_entries * sizeof(entry));
+
+    uint valid_count = 0;
+    // 收集目录中的所有条目
+    int result = collect_directory_entries(current_dir, temp_entries, max_possible_entries, &valid_count);
+    if (result < 0)
+    {
+        Error("cmd_ls: failed to collect directory entries");
+        free(temp_entries);
+        return E_ERROR;
+    }
+
+    // 根据实际收集到的条目数分配结果数组
+    if (valid_count > 0)
+    {
+        entry *result_entries = malloc(valid_count * sizeof(entry));
+        if (result_entries == NULL)
+        {
+            Error("cmd_ls: failed to allocate result array");
+            free(temp_entries);
+            return E_ERROR;
+        }
+        memcpy(result_entries, temp_entries, valid_count * sizeof(entry));
+        *entries = result_entries;
+    }
+    else
+    {
+        *entries = NULL;
+    }
+
+    *n = (int)valid_count;
+    free(temp_entries);
+
+    Log("cmd_ls: found %d entries in directory %d", valid_count, current_dir);
     return E_SUCCESS;
 }
 

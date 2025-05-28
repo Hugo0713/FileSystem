@@ -35,9 +35,9 @@ void mock_format()
 {
     int size = 1024;
     init_sb(size);         // 初始化超级块
-    init_data_bitmap();    // 初始化数据块位图
-    init_inode_bitmap();   // 初始化inode位图和inode区域
-    // init_root_directory(); // 初始化根目录
+    init_block_bitmap();   // 初始化数据块位图
+    init_inode_system();   // 初始化inode位图和inode区域
+    //init_root_directory(); // 初始化根目录
 
     // 初始化日志区域（清零）
     uchar buf[BSIZE];

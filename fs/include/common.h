@@ -16,6 +16,13 @@ typedef unsigned int uint;
 #define MAXNAME 18
 #define MAXBLOCK (BSIZE * NCYL * NSEC) // Maximum number of blocks in the filesystem
 
+// inode
+#define NDIRECT 10 // Direct blocks, you can change this value
+
+#define APB (BSIZE / sizeof(uint))           // Address per block 128
+#define MAXFILEB (NDIRECT + APB + APB * APB) // Maximum file size in blocks 16522
+#define MAXFILE (MAXFILEB * BSIZE)           // Maximum file size in bytes (8MB)
+
 // bits per block
 #define BPB (BSIZE * 8)
 

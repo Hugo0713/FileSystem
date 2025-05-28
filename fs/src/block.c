@@ -97,7 +97,7 @@ void write_block(int blockno, uchar *buf)
     memcpy(ramdisk + blockno * BSIZE, buf, BSIZE);
 }
 
-int init_block_bitmap()
+void init_block_bitmap()
 {
     // 清空所有数据块位图
     if (bitmap_clear_all(BITMAP_BLOCK) < 0)
@@ -113,5 +113,4 @@ int init_block_bitmap()
     }
 
     Log("Block bitmap initialized successfully");
-    return 0;
 }
