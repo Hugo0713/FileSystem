@@ -1,13 +1,7 @@
 #include "bitmap.h"
 #include "block.h"
 #include "log.h"
-
-// 位图类型枚举
-typedef enum
-{
-    BITMAP_INODE,
-    BITMAP_BLOCK
-} bitmap_type_t;
+#include <string.h>
 
 // 获取位图的起始块和块数
 static void get_bitmap_info(bitmap_type_t type, uint *start_block, uint *num_blocks, uint *max_items)

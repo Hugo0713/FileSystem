@@ -20,18 +20,24 @@ void sbinit();
 void init_sb(int size);        // Initialize superblock with given size
 void init_data_bitmap();       // Initialize data block bitmap
 void init_inode_bitmap();      // Initialize inode bitmap
+int init_directory_entries(uint dir_inum, uint parent_inum, uint data_block, short mode); // Initialize directory entries
 void init_root_directory();    // Initialize root directory
 
 int cmd_f(int ncyl, int nsec); // Format the filesystem
 
-uint find_file_in_directory(uint dir_inum, char *filename);           // Find file in directory
-int search_directory_block_for_name(uint block_addr, char *filename); // Search for a file name in a directory block
-int search_indirect_block_for_name(uint indirect_addr, char *filename);
-int search_double_indirect_block_for_name(uint double_indirect_addr, char *filename);
-int add_entry_to_directory(uint dir_inum, char *filename, uint file_inum, short file_type); // Add a new entry to a directory
+uint find_entry_in_directory(uint dir_inum, char *name, short entry_type); // Find an entry in a directory
+uint search_directory_block(uint block_addr, char *name, short entry_type); // Search a directory block for an entry
+uint search_indirect_block(uint indirect_addr, char *name, short entry_type); // Search an indirect block for an entry
+uint search_double_indirect_block(uint double_indirect_addr, char *name, short entry_type); // Search a double indirect block for an entry
+
+uint find_file_in_directory(uint dir_inum, char *filename); // Find a file in a directory
+uint find_file_only(uint dir_inum, char *filename); // Find a file only
+uint find_directory_only(uint dir_inum, char *dirname); // Find a directory only
+int add_entry_to_directory(uint dir_inum, char *filename, uint file_inum, short file_type, short file_mode); // Add an entry to a directory
 
 int cmd_mk(char *name, short mode);                                                         // Create a new file
 int cmd_mkdir(char *name, short mode);                                                      // Create a new directory
+
 int cmd_rm(char *name);
 int cmd_rmdir(char *name);
 

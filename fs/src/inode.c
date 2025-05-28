@@ -48,6 +48,7 @@ inode *iget(uint inum)
     ip->uid = disk_inode->uid;
     ip->size = disk_inode->size;
     ip->dirty = disk_inode->dirty;
+    ip->blocks = disk_inode->blocks;
 
     // 复制地址数组
     for (int i = 0; i < NDIRECT + 2; i++)
@@ -61,6 +62,7 @@ inode *iget(uint inum)
 
 void free_inode_blocks(inode *ip)
 {
+    uint block_count = 0;  // 记录释放的块数
     // 释放直接块
     for (int i = 0; i < NDIRECT; i++)
     {
@@ -68,9 +70,9 @@ void free_inode_blocks(inode *ip)
         {
             free_block(ip->addrs[i]);
             ip->addrs[i] = 0;
+            block_count++;
         }
     }
-
     // 释放一级间接块
     if (ip->addrs[NDIRECT] != 0)
     {
@@ -83,12 +85,13 @@ void free_inode_blocks(inode *ip)
             if (addrs[i] != 0)
             {
                 free_block(addrs[i]);
+                block_count++;
             }
         }
         free_block(ip->addrs[NDIRECT]);
         ip->addrs[NDIRECT] = 0;
+        block_count++; // 间接块本身
     }
-
     // 释放二级间接块
     if (ip->addrs[NDIRECT + 1] != 0)
     {
@@ -109,15 +112,20 @@ void free_inode_blocks(inode *ip)
                     if (level2_addrs[j] != 0)
                     {
                         free_block(level2_addrs[j]);
+                        block_count++;
                     }
                 }
                 free_block(level1_addrs[i]);
+                block_count++; // 一级间接块
             }
         }
         free_block(ip->addrs[NDIRECT + 1]);
-        ip->addrs[NDIRECT + 1] = 0;
+        block_count++; // 二级间接块本身
     }
+    
     ip->size = 0;
+    ip->blocks = 0;  // 重置块计数
+    Log("free_inode_blocks: freed %d blocks from inode %d", block_count, ip->inum);
 }
 
 void free_inode_in_bitmap(uint inum)
@@ -185,6 +193,7 @@ void init_inode(inode *ip, uint inum, short type)
     ip->uid = 0; // 可以根据需要设置为当前用户ID
     ip->size = 0;
     ip->dirty = 1; // 标记为脏，需要写回磁盘
+    ip->blocks = 0; // 初始化块计数为0
 
     switch (type)
     {
@@ -203,12 +212,12 @@ void init_inode(inode *ip, uint inum, short type)
         inum, type, ip->mode, ip->nlink);
 }
 
-static uint find_free_inode()
+uint find_free_inode()
 {
     return inode_bitmap_find_free();
 }
 
-static int mark_inode_used(uint inum)
+int mark_inode_used(uint inum)
 {
     int used = inode_bitmap_is_used(inum);
     if (used < 0)
@@ -245,7 +254,7 @@ inode *ialloc(short type)
     init_inode(ip, inum, type);                 // 初始化内存inode
     iupdate(ip);                                // 写回磁盘
 
-    Info("ialloc: successfully allocated inode %d (type=%d)", inum, type);
+    Log("ialloc: successfully allocated inode %d (type=%d)", inum, type);
     return ip;
 }
 
@@ -275,6 +284,7 @@ void iupdate(inode *ip)
     disk_inode->uid = ip->uid;
     disk_inode->size = ip->size;
     disk_inode->dirty = ip->dirty = 0; // 清除脏标志
+    disk_inode->blocks = ip->blocks;
 
     // 复制地址数组
     for (int i = 0; i < NDIRECT + 2; i++)
@@ -288,8 +298,8 @@ void iupdate(inode *ip)
 }
 
 // 根据偏移量获取对应的块号(考虑一级间接块和二级间接块分配的逻辑块号)
-static uint bmap(inode *ip, uint bn)
-{ // bn: 0 ~ MAXFILEB - 1
+uint bmap(inode *ip, uint bn)
+{
     uint addr;
     uint *indirect_block;
     uchar buf[BSIZE];
@@ -299,17 +309,18 @@ static uint bmap(inode *ip, uint bn)
     {
         if ((addr = ip->addrs[bn]) == 0)
         {
-            ip->addrs[bn] = addr = alloc_block();
+            ip->addrs[bn] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
+            ip->blocks++;  // 增加块计数
             ip->dirty = 1;
         }
         return addr;
     }
 
-    bn -= NDIRECT; // 跳过直接块部分
+    bn -= NDIRECT;
     // 一级间接块
     if (bn < APB)
     {
@@ -317,79 +328,79 @@ static uint bmap(inode *ip, uint bn)
         addr = ip->addrs[NDIRECT];
         if (addr == 0)
         {
-            ip->addrs[NDIRECT] = addr = alloc_block();
+            ip->addrs[NDIRECT] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
+            ip->blocks++;  // 增加间接块计数
             ip->dirty = 1;
         }
 
-        // 读取间接块
         read_block(addr, buf);
-        indirect_block = (uint *)buf; // 一级间接块存储的地址数组
+        indirect_block = (uint *)buf;
 
         // 分配数据块（如果需要）
         if ((addr = indirect_block[bn]) == 0)
         {
-            indirect_block[bn] = addr = alloc_block();
+            indirect_block[bn] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
-            write_block(ip->addrs[NDIRECT], buf); // 更新一级间接块
+            ip->blocks++;  // 增加数据块计数
+            write_block(ip->addrs[NDIRECT], buf);
         }
         return addr;
     }
 
-    bn -= APB; // 跳过一级间接块部分
-    // 二级间接块
+    bn -= APB;
+    // 二级间接块 - 类似地添加块计数
     if (bn < APB * APB)
     {
         // 分配二级间接块（如果需要）
         if ((addr = ip->addrs[NDIRECT + 1]) == 0)
         {
-            ip->addrs[NDIRECT + 1] = addr = alloc_block();
+            ip->addrs[NDIRECT + 1] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
+            ip->blocks++;  // 增加二级间接块计数
             ip->dirty = 1;
         }
 
-        // 读取二级间接块
         read_block(addr, buf);
         indirect_block = (uint *)buf;
 
         // 分配一级间接块（如果需要）
         if ((addr = indirect_block[bn / APB]) == 0)
         {
-            indirect_block[bn / APB] = addr = alloc_block();
+            indirect_block[bn / APB] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
+            ip->blocks++;  // 增加一级间接块计数
             write_block(ip->addrs[NDIRECT + 1], buf);
         }
 
-        // 读取一级间接块
         read_block(addr, buf);
         indirect_block = (uint *)buf;
 
         // 分配数据块（如果需要）
         if ((addr = indirect_block[bn % APB]) == 0)
         {
-            indirect_block[bn % APB] = addr = alloc_block();
+            indirect_block[bn % APB] = addr = allocate_block();
             if (addr == 0)
             {
                 return 0;
             }
+            ip->blocks++;  // 增加数据块计数
             write_block(ip->addrs[NDIRECT + 1], buf);
         }
         return addr;
     }
-
-    // 超出文件大小限制
     Error("bmap: block number %d out of range", bn);
     return 0;
 }

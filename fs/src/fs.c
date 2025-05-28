@@ -561,7 +561,7 @@ int cmd_rmdir(char *name)
 
 int cmd_cd(char *name)
 {
-
+    return E_SUCCESS;
 }
 int cmd_ls(entry **entries, int *n)
 {

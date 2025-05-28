@@ -25,9 +25,9 @@ typedef struct
     ushort nlink;            // Number of links
     ushort uid;              // User ID
     uint size;               // Size in bytes
-    uint dirty;              // Dirty flag, 1 if inode is modified
+    ushort dirty;              // Dirty flag, 1 if inode is modified
+    ushort blocks;          // Number of blocks allocated (for file size)
     uint addrs[NDIRECT + 2]; // Data block addresses, the last two are indirect blocks
-
 } dinode; // 64 bytes, 8 dinodes for each blocks
 
 // inode in memory
@@ -40,7 +40,8 @@ typedef struct
     ushort nlink; // Number of links
     ushort uid;   // User ID
     uint size;    // Size in bytes
-    uint dirty;   // Dirty flag, 1 if inode is modified
+    ushort dirty;   // Dirty flag, 1 if inode is modified
+    ushort blocks; // Number of blocks allocated (for file size)
     uint addrs[NDIRECT + 2];
 } inode;
 
