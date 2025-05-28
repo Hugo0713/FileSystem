@@ -59,6 +59,19 @@ test: test_fs
 	sudo sysctl vm.mmap_rnd_bits=28
 	./test_fs
 
+# 添加单独测试目标
+test-block: test_fs
+    sudo sysctl vm.mmap_rnd_bits=28
+    ./test_fs block
+
+test-inode: test_fs
+    sudo sysctl vm.mmap_rnd_bits=28
+    ./test_fs inode
+
+test-fs: test_fs
+    sudo sysctl vm.mmap_rnd_bits=28
+    ./test_fs fs
+
 # rules to build object files
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(@D)

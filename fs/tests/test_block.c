@@ -3,29 +3,38 @@
 #include "block.h"
 #include "common.h"
 #include "mintest.h"
+#include "fs.h"
+#include "bitmap.h"
 
 int nmeta;
 
+// void mock_format()
+// {
+//     sb.size = 2048; // 2048 blocks
+//     int nbitmap = (sb.size / BPB) + 1;
+//     nmeta = nbitmap + 7; // some first blocks for metadata
+
+//     sb.bmapstart = 1;
+//     uchar buf[BSIZE];
+//     memset(buf, 0, BSIZE);
+//     for (int i = 0; i < sb.size; i += BPB)
+//         write_block(BBLOCK(i), buf); // initialize bitmap blocks
+
+//     for (int i = 0; i < nmeta; i += BPB)
+//     {
+//         memset(buf, 0, BSIZE);
+//         for (int j = 0; j < BPB; j++)
+//             if (i + j < nmeta)
+//                 buf[j / 8] |= 1 << (j % 8); // mark as used
+//         write_block(BBLOCK(i), buf);
+//     }
+// }
+
 void mock_format()
 {
-    sb.size = 2048; // 2048 blocks
-    int nbitmap = (sb.size / BPB) + 1;
-    nmeta = nbitmap + 7; // some first blocks for metadata
-
-    sb.bmapstart = 1;
-    uchar buf[BSIZE];
-    memset(buf, 0, BSIZE);
-    for (int i = 0; i < sb.size; i += BPB)
-        write_block(BBLOCK(i), buf); // initialize bitmap blocks
-
-    for (int i = 0; i < nmeta; i += BPB)
-    {
-        memset(buf, 0, BSIZE);
-        for (int j = 0; j < BPB; j++)
-            if (i + j < nmeta)
-                buf[j / 8] |= 1 << (j % 8); // mark as used
-        write_block(BBLOCK(i), buf);
-    }
+    cmd_f(NCYL, NSEC); // Format the filesystem with default parameters
+    // Calculate the number of metadata blocks
+    nmeta = sb.bmapstart + sb.bmapblocks + sb.inodebmapblocks + sb.nlog; 
 }
 
 mt_test(test_read_write_block)
