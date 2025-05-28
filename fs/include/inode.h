@@ -44,9 +44,6 @@ typedef struct
     uint addrs[NDIRECT + 2];
 } inode;
 
-// You can change the size of MAXNAME
-#define MAXNAME 18
-
 // Get an inode by number (returns allocated inode or NULL)
 // Don't forget to use iput()
 inode *iget(uint inum);
