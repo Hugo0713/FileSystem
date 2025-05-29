@@ -8,6 +8,7 @@
 #include "log.h"
 #include "bitmap.h"
 
+// 获取指定inode的内存表示
 inode *iget(uint inum)
 {
     if (inum >= sb.ninodes)
@@ -60,6 +61,7 @@ inode *iget(uint inum)
     return ip;
 }
 
+// 释放inode的所有数据块
 void free_inode_blocks(inode *ip)
 {
     uint block_count = 0; // 记录释放的块数
@@ -128,6 +130,7 @@ void free_inode_blocks(inode *ip)
     Log("free_inode_blocks: freed %d blocks from inode %d", block_count, ip->inum);
 }
 
+// 在inode位图中标记该inode为已使用
 void free_inode_in_bitmap(uint inum)
 {
     if (inode_bitmap_set_free(inum) < 0)
@@ -136,6 +139,7 @@ void free_inode_in_bitmap(uint inum)
     }
 }
 
+// 清零磁盘上的inode
 void clear_disk_inode(uint inum)
 {
     uint block_num = sb.inodestart + inum / (BSIZE / sizeof(dinode));
@@ -151,6 +155,7 @@ void clear_disk_inode(uint inum)
     write_block(block_num, buf);
 }
 
+// 释放inode并将其写回磁盘
 void iput(inode *ip)
 {
     if (ip == NULL)
@@ -177,6 +182,7 @@ void iput(inode *ip)
     Log("iput: inode %d released", inum);
 }
 
+// 初始化一个新的inode
 void init_inode(inode *ip, uint inum, short type)
 {
     if (ip == NULL)
@@ -212,6 +218,7 @@ void init_inode(inode *ip, uint inum, short type)
     Log("init_inode: initialized inode %d (type=%d, mode=%o, nlink=%d)", inum, type, ip->mode, ip->nlink);
 }
 
+// 标记inode为已使用
 int mark_inode_used(uint inum)
 {
     int used = inode_bitmap_is_used(inum);
@@ -229,6 +236,7 @@ int mark_inode_used(uint inum)
     return inode_bitmap_set_used(inum);
 }
 
+// 分配一个新的inode
 inode *ialloc(short type)
 {
     int inum = inode_bitmap_find_free();
@@ -253,6 +261,7 @@ inode *ialloc(short type)
     return ip;
 }
 
+// 更新inode到磁盘
 void iupdate(inode *ip)
 {
     if (ip == NULL)
@@ -400,6 +409,7 @@ uint bmap(inode *ip, uint bn)
     return 0;
 }
 
+// 从inode中读取数据到dst缓冲区
 int readi(inode *ip, uchar *dst, uint off, uint n)
 {
     uint total, bytes_this_iteration; // 总共读取的字节数, 本次读取的字节数
@@ -455,6 +465,7 @@ int readi(inode *ip, uchar *dst, uint off, uint n)
     return total;
 }
 
+// 向inode中写入数据
 int writei(inode *ip, uchar *src, uint off, uint n)
 {
     uint total, bytes_this_iteration; // 总共写入的字节数, 本次写入的字节数
@@ -517,13 +528,14 @@ int writei(inode *ip, uchar *src, uint off, uint n)
     return total;
 }
 
+// 初始化 inode 系统
 void init_inode_system()
 {
     // 清空 inode 位图
     if (bitmap_clear_all(BITMAP_INODE) < 0)
     {
         Error("init_inode_system: failed to clear inode bitmap");
-        return -1;
+        return;
     }
 
     // 初始化所有 inode 为未使用状态

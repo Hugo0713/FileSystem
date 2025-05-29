@@ -553,11 +553,22 @@ int cmd_mkdir(char *name, short mode)
         return E_ERROR;
     }
 
+    // 增加父目录的链接数（新增了一个子目录）
+    inode *parent_ip = iget(current_dir);
+    if (parent_ip != NULL && parent_ip->type == T_DIR)
+    {
+        parent_ip->nlink++;
+        parent_ip->dirty = 1;
+        iupdate(parent_ip);
+        iput(parent_ip);
+    }
+
     Log("cmd_mkdir: successfully created directory '%s' with inode %d", name, ip->inum);
     iput(ip);
     return E_SUCCESS;
 }
 
+// 从目录中删除指定条目
 int remove_entry_from_directory(uint dir_inum, char *filename)
 {
     if (filename == NULL || strlen(filename) == 0)
@@ -566,45 +577,15 @@ int remove_entry_from_directory(uint dir_inum, char *filename)
         return -1;
     }
 
-    // 获取目录 inode
-    inode *dir_ip = iget(dir_inum);
-    if (dir_ip == NULL || dir_ip->type != T_DIR)
-    {
-        Error("remove_entry_from_directory: invalid directory inode %d", dir_inum);
-        if (dir_ip)
-            iput(dir_ip);
-        return -1;
-    }
-
-    Log("remove_entry_from_directory: removing '%s' from directory %d", filename, dir_inum);
-
-    // 检查目录是否为空
-    if (dir_ip->size == 0)
-    {
-        Log("remove_entry_from_directory: directory is empty");
-        iput(dir_ip);
-        return -1;
-    }
-
-    // 使用与 cmd_ls 相同的最大条目数计算方法
-    uint max_possible_entries = MAXFILEB * (BSIZE / sizeof(entry));
-
-    // 读取所有目录条目
-    entry *entries = malloc(max_possible_entries * sizeof(entry));
-    if (entries == NULL)
-    {
-        Error("remove_entry_from_directory: failed to allocate memory");
-        iput(dir_ip);
-        return -1;
-    }
+    // 收集所有条目
+    uint max_entries = MAXFILEB * (BSIZE / sizeof(entry));
+    entry *entries = malloc(max_entries * sizeof(entry));
 
     uint count = 0;
-    int collect_result = collect_directory_entries(dir_inum, entries, max_possible_entries, &count);
-    if (collect_result < 0)
+    if (collect_directory_entries(dir_inum, entries, max_entries, &count) < 0)
     {
-        Error("remove_entry_from_directory: failed to collect directory entries");
+        Error("remove_entry_from_directory: failed to collect entries");
         free(entries);
-        iput(dir_ip);
         return -1;
     }
 
@@ -618,127 +599,51 @@ int remove_entry_from_directory(uint dir_inum, char *filename)
             break;
         }
     }
-
     if (found_index == -1)
     {
         Log("remove_entry_from_directory: entry '%s' not found", filename);
         free(entries);
-        iput(dir_ip);
         return -1;
     }
 
-    // 计算删除后的条目数
-    uint new_count = count - 1;
-
-    // 释放目录的所有数据块
-    free_file_blocks(dir_ip);
-
-    // 重新设置目录大小和块数
-    dir_ip->size = new_count * sizeof(entry);
-    dir_ip->blocks = 0;
-    dir_ip->dirty = 1;
-
-    // 如果还有条目，重新分配数据块并写入
-    if (new_count > 0)
+    // 获取目录 inode
+    inode *dir_ip = iget(dir_inum);
+    if (dir_ip == NULL)
     {
-        // 计算需要的数据块数量
-        uint blocks_needed = (new_count * sizeof(entry) + BSIZE - 1) / BSIZE;
-        uint entries_per_block = BSIZE / sizeof(entry);
-
-        // 创建新的条目数组，不包含被删除的条目
-        entry *new_entries = malloc(new_count * sizeof(entry));
-        if (new_entries == NULL)
+        Error("remove_entry_from_directory: failed to get directory inode");
+        free(entries);
+        return -1;
+    }
+    // 清空目录
+    free_file_blocks(dir_ip);
+    // 重新写入所有条目（除了被删除的）
+    for (uint i = 0, write_index = 0; i < count; i++)
+    {
+        if (i != found_index) // 跳过要删除的条目
         {
-            Error("remove_entry_from_directory: failed to allocate new entries array");
-            free(entries);
-            iput(dir_ip);
-            return -1;
-        }
-
-        // 复制除了被删除条目之外的所有条目
-        uint new_index = 0;
-        for (uint i = 0; i < count; i++)
-        {
-            if (i != found_index)
+            int bytes_written = writei(dir_ip, (uchar *)&entries[i], write_index * sizeof(entry), sizeof(entry));
+            if (bytes_written != sizeof(entry))
             {
-                new_entries[new_index] = entries[i];
-                new_index++;
-            }
-        }
-
-        // 分配并写入数据块
-        for (uint block_idx = 0; block_idx < blocks_needed && block_idx < NDIRECT; block_idx++)
-        {
-            uint data_block = allocate_block();
-            if (data_block == 0)
-            {
-                Error("remove_entry_from_directory: failed to allocate data block");
+                Error("remove_entry_from_directory: failed to write entry");
                 free(entries);
-                free(new_entries);
                 iput(dir_ip);
                 return -1;
             }
-
-            dir_ip->addrs[block_idx] = data_block;
-            dir_ip->blocks++;
-
-            // 准备写入该块的数据
-            uchar buf[BSIZE];
-            memset(buf, 0, BSIZE);
-
-            // 计算该块应该写入的条目范围
-            uint start_entry = block_idx * entries_per_block;
-            uint end_entry = start_entry + entries_per_block;
-            if (end_entry > new_count)
-                end_entry = new_count;
-
-            // 将条目复制到缓冲区
-            uint entries_in_block = end_entry - start_entry;
-            if (entries_in_block > 0)
-            {
-                memcpy(buf, &new_entries[start_entry], entries_in_block * sizeof(entry));
-            }
-
-            // 直接写入数据块
-            write_block(data_block, buf);
-            Log("remove_entry_from_directory: wrote %d entries to block %d", entries_in_block, data_block);
+            write_index++;
         }
-
-        free(new_entries);
     }
-
-    // 更新 inode 到磁盘
-    iupdate(dir_ip);
 
     free(entries);
     iput(dir_ip);
-    Log("remove_entry_from_directory: successfully removed '%s' from directory %d, %d entries remaining",
-        filename, dir_inum, new_count);
+    Log("remove_entry_from_directory: successfully removed '%s'", filename);
     return 0;
 }
 
 // 检查目录是否为空（除了 "." 和 ".." 条目）
 int is_directory_empty(uint dir_inum)
 {
-    // 计算目录可能包含的最大条目数
-    inode *dir_ip = iget(dir_inum);
-    if (dir_ip == NULL || dir_ip->type != T_DIR)
-    {
-        Error("is_directory_empty: invalid directory inode %d", dir_inum);
-        if (dir_ip)
-            iput(dir_ip);
-        return -1;
-    }
-
-    uint max_entries = (dir_ip->size + sizeof(entry) - 1) / sizeof(entry);
-    iput(dir_ip);
-
-    if (max_entries <= 2) // 只有 "." 和 ".." 条目
-    {
-        return 1; // 空目录
-    }
-
     // 收集所有条目
+    uint max_entries = MAXFILEB * (BSIZE / sizeof(entry));
     entry *entries = malloc(max_entries * sizeof(entry));
     if (entries == NULL)
     {
@@ -764,7 +669,6 @@ int is_directory_empty(uint dir_inum)
             valid_entries++;
         }
     }
-
     free(entries);
     return (valid_entries == 0) ? 1 : 0; // 1表示空目录，0表示非空
 }
@@ -776,69 +680,14 @@ void free_file_blocks(inode *ip)
     {
         return;
     }
-
     Log("free_file_blocks: freeing blocks for inode %d", ip->inum);
 
-    // 释放直接块
-    for (int i = 0; i < NDIRECT; i++)
-    {
-        if (ip->addrs[i] != 0)
-        {
-            free_block(ip->addrs[i]);
-            ip->addrs[i] = 0;
-        }
-    }
-
-    // 释放一级间接块
-    if (ip->addrs[NDIRECT] != 0)
-    {
-        uchar buf[BSIZE];
-        read_block(ip->addrs[NDIRECT], buf);
-        uint *addrs = (uint *)buf;
-
-        for (int i = 0; i < APB; i++)
-        {
-            if (addrs[i] != 0)
-            {
-                free_block(addrs[i]);
-            }
-        }
-        free_block(ip->addrs[NDIRECT]);
-        ip->addrs[NDIRECT] = 0;
-    }
-
-    // 释放二级间接块
-    if (ip->addrs[NDIRECT + 1] != 0)
-    {
-        uchar buf[BSIZE];
-        read_block(ip->addrs[NDIRECT + 1], buf);
-        uint *level1_addrs = (uint *)buf;
-
-        for (int i = 0; i < APB; i++)
-        {
-            if (level1_addrs[i] != 0)
-            {
-                uchar buf2[BSIZE];
-                read_block(level1_addrs[i], buf2);
-                uint *level2_addrs = (uint *)buf2;
-
-                for (int j = 0; j < APB; j++)
-                {
-                    if (level2_addrs[j] != 0)
-                    {
-                        free_block(level2_addrs[j]);
-                    }
-                }
-                free_block(level1_addrs[i]);
-            }
-        }
-        free_block(ip->addrs[NDIRECT + 1]);
-        ip->addrs[NDIRECT + 1] = 0;
-    }
+    free_inode_blocks(ip);
 
     ip->size = 0;
     ip->blocks = 0;
     ip->dirty = 1;
+    iupdate(ip);
 }
 
 int cmd_rm(char *name)
@@ -848,7 +697,6 @@ int cmd_rm(char *name)
         Error("cmd_rm: invalid filename");
         return E_ERROR;
     }
-
     Log("cmd_rm: removing file '%s'", name);
 
     // 在当前目录中查找文件
@@ -876,31 +724,25 @@ int cmd_rm(char *name)
 
     // 检查文件是否有其他硬链接
     if (file_ip->nlink > 1)
-    {
-        // 只是减少链接数，不删除实际数据
+    { // 只是减少链接数，不删除实际数据
         file_ip->nlink--;
         file_ip->dirty = 1;
         iupdate(file_ip);
         Log("cmd_rm: decreased link count for file '%s' to %d", name, file_ip->nlink);
     }
-    else
+    else // 最后一个链接，删除文件数据
     {
-        // 最后一个链接，删除文件数据
         Log("cmd_rm: freeing file data for '%s'", name);
 
         // 释放文件的所有数据块
         free_file_blocks(file_ip);
-
         // 标记 inode 为未使用
         file_ip->type = T_UNUSED;
         file_ip->dirty = 1;
         iupdate(file_ip);
 
         // 释放 inode
-        if (inode_bitmap_set_free(file_inum) < 0)
-        {
-            Error("cmd_rm: failed to mark inode %d as free", file_inum);
-        }
+        free_inode_in_bitmap(file_inum);
     }
 
     iput(file_ip);
@@ -912,7 +754,6 @@ int cmd_rm(char *name)
         Error("cmd_rm: failed to remove file from directory");
         return E_ERROR;
     }
-
     Log("cmd_rm: successfully removed file '%s'", name);
     return E_SUCCESS;
 }
@@ -924,14 +765,12 @@ int cmd_rmdir(char *name)
         Error("cmd_rmdir: invalid directory name");
         return E_ERROR;
     }
-
     // 不允许删除特殊目录
     if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
     {
         Error("cmd_rmdir: cannot remove '.' or '..' directory");
         return E_ERROR;
     }
-
     Log("cmd_rmdir: removing directory '%s'", name);
 
     // 在当前目录中查找目录
@@ -969,14 +808,12 @@ int cmd_rmdir(char *name)
         Error("cmd_rmdir: failed to get directory inode %d", dir_inum);
         return E_ERROR;
     }
-
     if (dir_ip->type != T_DIR)
     {
         Error("cmd_rmdir: '%s' is not a directory", name);
         iput(dir_ip);
         return E_ERROR;
     }
-
     Log("cmd_rmdir: freeing directory data for '%s'", name);
 
     // 释放目录的所有数据块
@@ -988,11 +825,7 @@ int cmd_rmdir(char *name)
     iupdate(dir_ip);
 
     // 释放 inode
-    if (inode_bitmap_set_free(dir_inum) < 0)
-    {
-        Error("cmd_rmdir: failed to mark inode %d as free", dir_inum);
-    }
-
+    free_inode_blocks(dir_ip);
     iput(dir_ip);
 
     // 从父目录中删除条目
@@ -1072,21 +905,6 @@ uint resolve_absolute_path(char *path)
     return current_inum;
 }
 
-// 获取指定目录的父目录 inode 号（简化版）
-uint get_parent_directory(uint dir_inum)
-{
-    uint parent_inum = find_entry_in_directory(dir_inum, "..", T_DIR);
-
-    if (parent_inum == 0)
-    {
-        Error("get_parent_directory: '..' entry not found in directory %d", dir_inum);
-        return 0;
-    }
-
-    Log("get_parent_directory: parent of directory %d is %d", dir_inum, parent_inum);
-    return parent_inum;
-}
-
 int cmd_cd(char *path)
 {
     if (path == NULL)
@@ -1113,7 +931,7 @@ int cmd_cd(char *path)
     {
         if (strcmp(path, "..") == 0)
         {
-            target_inum = get_parent_directory(current_dir);
+            target_inum = find_entry_in_directory(current_dir, "..", T_DIR);
         }
         else
         {
@@ -1331,7 +1149,6 @@ int cmd_w(char *name, uint len, const char *data)
         Error("cmd_w: invalid data pointer");
         return E_ERROR;
     }
-
     Log("cmd_w: writing %d bytes to file '%s'", len, name);
 
     // 在当前目录中查找文件
@@ -1390,7 +1207,6 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
         Error("cmd_i: invalid data pointer");
         return E_ERROR;
     }
-
     Log("cmd_i: inserting %d bytes to file '%s' at position %d", len, name, pos);
 
     // 在当前目录中查找文件
@@ -1408,7 +1224,6 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
         Error("cmd_i: failed to get file inode %d", file_inum);
         return E_ERROR;
     }
-
     if (file_ip->type != T_FILE)
     {
         Error("cmd_i: '%s' is not a file", name);
@@ -1423,9 +1238,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
         iput(file_ip);
         return E_ERROR;
     }
-
-    // 如果没有数据要插入
-    if (len == 0)
+    if (len == 0) // 如果没有数据要插入
     {
         Log("cmd_i: no data to insert");
         iput(file_ip);
@@ -1435,16 +1248,9 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
     // 读取原文件内容
     uchar *original_data = NULL;
     uint original_size = file_ip->size;
-
     if (original_size > 0)
     {
         original_data = malloc(original_size);
-        if (original_data == NULL)
-        {
-            Error("cmd_i: failed to allocate buffer for original data");
-            iput(file_ip);
-            return E_ERROR;
-        }
 
         int bytes_read = readi(file_ip, original_data, 0, original_size);
         if (bytes_read != original_size)
@@ -1455,7 +1261,6 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
             return E_ERROR;
         }
     }
-
     // 清空文件
     file_ip->size = 0;
     file_ip->dirty = 1;
@@ -1513,7 +1318,6 @@ int cmd_d(char *name, uint pos, uint len)
         Error("cmd_d: invalid filename");
         return E_ERROR;
     }
-
     Log("cmd_d: deleting %d bytes from file '%s' at position %d", len, name, pos);
 
     // 在当前目录中查找文件
@@ -1531,7 +1335,6 @@ int cmd_d(char *name, uint pos, uint len)
         Error("cmd_d: failed to get file inode %d", file_inum);
         return E_ERROR;
     }
-
     if (file_ip->type != T_FILE)
     {
         Error("cmd_d: '%s' is not a file", name);
@@ -1546,7 +1349,6 @@ int cmd_d(char *name, uint pos, uint len)
         iput(file_ip);
         return E_ERROR;
     }
-
     // 如果没有数据要删除
     if (len == 0)
     {
