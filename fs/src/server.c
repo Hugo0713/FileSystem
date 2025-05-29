@@ -15,6 +15,23 @@ void on_connection(int id)
 
 int on_recv(int id, tcp_buffer *wb, char *msg, int len)
 {
+    // char *p = strtok(msg, " \r\n");
+    // int ret = 1;
+    // for (int i = 0; i < NCMD; i++)
+    //     if (p && strcmp(p, cmd_table[i].name) == 0)
+    //     {
+    //         ret = cmd_table[i].handler(wb, p + strlen(p) + 1, len - strlen(p) - 1);
+    //         break;
+    //     }
+    // if (ret == 1)
+    // {
+    //     static char unk[] = "Unknown command";
+    //     buffer_append(wb, unk, sizeof(unk));
+    // }
+    // if (ret < 0)
+    // {
+    //     return -1;
+    // }
     return 0;
 }
 

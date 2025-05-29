@@ -39,5 +39,8 @@ void read_block(int blockno, uchar *buf);
 void write_block(int blockno, uchar *buf);
 
 void init_block_bitmap();
+int init_disk_connection(const char *host, int port);
+void cleanup_disk_connection();
+void block_to_cyl_sec(int blockno, int *cyl, int *sec);
 
 #endif

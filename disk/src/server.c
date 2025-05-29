@@ -24,6 +24,12 @@ int handle_r(tcp_buffer *wb, char *args, int len)
     int cyl;
     int sec;
     char buf[512];
+
+    if (sscanf(args, "%d %d", &cyl, &sec) != 2)
+    {
+        reply_with_no(wb, "Invalid arguments", 0);
+        return 1;
+    }
     if (cmd_r(cyl, sec, buf) == 0)
     {
         reply_with_yes(wb, buf, 512);
@@ -41,6 +47,28 @@ int handle_w(tcp_buffer *wb, char *args, int len)
     int sec;
     int datalen;
     char *data;
+
+    if (sscanf(args, "%d %d %d", &cyl, &sec, &datalen) != 3)
+    {
+        reply_with_no(wb, NULL, 0);
+        return 0;
+    }
+    char *ptr = args;
+    int space_count = 0;
+    while (*ptr && space_count < 3)
+    {
+        if (*ptr == ' ')
+            space_count++;
+        ptr++;
+    }
+
+    if (space_count < 3)
+    {
+        reply_with_no(wb, NULL, 0);
+        return 0;
+    }
+
+    data = ptr;
 
     if (cmd_w(cyl, sec, datalen, data) == 0)
     {

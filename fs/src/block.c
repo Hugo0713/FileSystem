@@ -5,9 +5,36 @@
 #include "common.h"
 #include "log.h"
 #include "bitmap.h"
+#include "tcp_utils.h"
 
 superblock sb;
-uchar ramdisk[MAXBLOCK];
+// uchar ramdisk[MAXBLOCK];
+static tcp_client disk_client = NULL;
+
+// 磁盘信息
+extern int ncyl, nsec;
+
+int init_disk_connection(const char *host, int port)
+{
+    disk_client = client_init(host, port);
+    if (disk_client == NULL)
+    {
+        Error("init_disk_connection: failed to connect to disk server at %s:%d", host, port);
+        return -1;
+    }
+    Log("Disk connection initialized successfully to %s:%d", host, port);
+    return 0;
+}
+
+void cleanup_disk_connection()
+{
+    if (disk_client)
+    {
+        client_destroy(disk_client);
+        disk_client = NULL;
+        Log("Disk connection closed");
+    }
+}
 
 void zero_block(uint bno)
 {
@@ -69,32 +96,110 @@ void free_block(uint bno)
     Log("free_block: block %d freed", bno);
 }
 
-void get_disk_info(int *ncyl, int *nsec)
+void get_disk_info(int *ncyl_, int *nsec_)
 {
-    *ncyl = NCYL;
-    *nsec = NSEC;
+    if (!disk_client)
+    {
+        Error("Disk client not initialized");
+        return;
+    }
+
+    // 发送 "I" 命令获取磁盘信息
+    char cmd[] = "I";
+    client_send(disk_client, cmd, strlen(cmd) + 1);
+
+    char response[256];
+    int n = client_recv(disk_client, response, sizeof(response));
+    response[n] = '\0';
+
+    // 解析响应："ncyl nsec"
+    if (sscanf(response, "%d %d", ncyl_, nsec_) != 2)
+    {
+        Error("Failed to parse disk info: %s", response);
+    }
+
+    Log("Got disk info: %d cylinders, %d sectors", ncyl, nsec);
+}
+
+// 将块号转换为柱面/扇区的函数
+void block_to_cyl_sec(int blockno, int *cyl, int *sec)
+{
+    *cyl = blockno / nsec;
+    *sec = blockno % nsec;
 }
 
 void read_block(int blockno, uchar *buf)
 {
-    // if (blockno < 0 || blockno >= sb.size)
-    // {
-    //     Error("read_block: blockno %d out of range", blockno);
-    //     return;
-    // }
-    // Read the block from disk
-    memcpy(buf, ramdisk + blockno * BSIZE, BSIZE);
+    if (!disk_client)
+    {
+        Error("Disk client not initialized");
+        return;
+    }
+
+    int cyl, sec;
+    block_to_cyl_sec(blockno, &cyl, &sec);
+
+    // 发送读命令 "R cyl sec"
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "R %d %d", cyl, sec);
+    client_send(disk_client, cmd, strlen(cmd) + 1);
+
+    char response[1024]; 
+    int n = client_recv(disk_client, response, sizeof(response));
+
+    // 检查响应格式
+    if (n > 3 && strncmp(response, "Yes", 3) == 0)
+    {
+        // 数据在"Yes"之后
+        int data_size = n - 4; // 减去"Yes\0"
+        if (data_size >= BSIZE)
+        {
+            memcpy(buf, response + 4, BSIZE);
+        }
+        else
+        {
+            memcpy(buf, response + 4, data_size);
+            memset(buf + data_size, 0, BSIZE - data_size);
+        }
+        Log("read_block: successfully read block %d", blockno);
+    }
+    else
+    {
+        Error("read_block: failed for block %d, response: %s", blockno, response);
+        memset(buf, 0, BSIZE);
+    }
 }
 
 void write_block(int blockno, uchar *buf)
 {
-    // if (blockno < 0 || blockno >= sb.size)
-    // {
-    //     Error("write_block: blockno %d out of range", blockno);
-    //     return;
-    // }
-    // Write the block to disk
-    memcpy(ramdisk + blockno * BSIZE, buf, BSIZE);
+    if (!disk_client)
+    {
+        Error("Disk client not initialized");
+        return;
+    }
+
+    int cyl, sec;
+    block_to_cyl_sec(blockno, &cyl, &sec);
+
+    // 发送写命令 "W cyl sec len data"
+    char cmd[1024];
+    int header_len = snprintf(cmd, sizeof(cmd), "W %d %d %d ", cyl, sec, BSIZE);
+    memcpy(cmd + header_len, buf, BSIZE);
+
+    client_send(disk_client, cmd, header_len + BSIZE);
+
+    char response[256];
+    int n = client_recv(disk_client, response, sizeof(response));
+    response[n] = '\0';
+
+    if (strncmp(response, "Yes", 3) == 0)
+    {
+        Log("write_block: successfully wrote block %d", blockno);
+    }
+    else
+    {
+        Error("write_block: failed for block %d, response: %s", blockno, response);
+    }
 }
 
 void init_block_bitmap()

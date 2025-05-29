@@ -41,7 +41,7 @@ int handle_f(char *args)
 
 int handle_mk(char *args)
 {
-    char *name;
+    char *name = args;
     short mode = 0;
     if (cmd_mk(name, mode) == E_SUCCESS)
     {
@@ -56,7 +56,7 @@ int handle_mk(char *args)
 
 int handle_mkdir(char *args)
 {
-    char *name;
+    char *name = args;
     short mode = 0;
     if (cmd_mkdir(name, mode) == E_SUCCESS)
     {
@@ -71,7 +71,7 @@ int handle_mkdir(char *args)
 
 int handle_rm(char *args)
 {
-    char *name;
+    char *name = args;
     if (cmd_rm(name) == E_SUCCESS)
     {
         ReplyYes();
@@ -85,7 +85,7 @@ int handle_rm(char *args)
 
 int handle_cd(char *args)
 {
-    char *name;
+    char *name = args;
     if (cmd_cd(name) == E_SUCCESS)
     {
         ReplyYes();
@@ -99,7 +99,7 @@ int handle_cd(char *args)
 
 int handle_rmdir(char *args)
 {
-    char *name;
+    char *name = args;
     if (cmd_rmdir(name) == E_SUCCESS)
     {
         ReplyYes();
@@ -121,20 +121,24 @@ int handle_ls(char *args)
         return 0;
     }
     ReplyYes();
+    for (int i = 0; i < n; i++)
+    {
+        printf("%s %d %d\n", entries[i].name, entries[i].inum, entries[i].type);
+    }
     free(entries);
     return 0;
 }
 
 int handle_cat(char *args)
 {
-    char *name;
+    char *name = args;
 
     uchar *buf = NULL;
     uint len;
     if (cmd_cat(name, &buf, &len) == E_SUCCESS)
     {
         ReplyYes();
-        printf("%s\n", buf);
+        printf("%.*s\n", len, buf);
         free(buf);
     }
     else
@@ -146,9 +150,10 @@ int handle_cat(char *args)
 
 int handle_w(char *args)
 {
-    char *name;
-    uint len;
-    char *data;
+    char *name = strtok(args, " ");
+    char *len_str = strtok(NULL, " ");
+    uint len = atoi(len_str);
+    char *data = strtok(NULL, " ");
     if (cmd_w(name, len, data) == E_SUCCESS)
     {
         ReplyYes();
@@ -162,10 +167,13 @@ int handle_w(char *args)
 
 int handle_i(char *args)
 {
-    char *name;
-    uint pos;
-    uint len;
-    char *data;
+    char *name = strtok(args, " ");
+    char *pos_str = strtok(NULL, " ");
+    char *len_str = strtok(NULL, " ");
+    char *data = strtok(NULL, "");
+    uint pos = atoi(pos_str);
+    uint len = atoi(len_str);
+
     if (cmd_i(name, pos, len, data) == E_SUCCESS)
     {
         ReplyYes();
@@ -179,9 +187,12 @@ int handle_i(char *args)
 
 int handle_d(char *args)
 {
-    char *name;
-    uint pos;
-    uint len;
+    char *name = strtok(args, " ");
+    char *pos_str = strtok(NULL, " ");
+    char *len_str = strtok(NULL, " ");
+    uint pos = atoi(pos_str);
+    uint len = atoi(len_str);
+
     if (cmd_d(name, pos, len) == E_SUCCESS)
     {
         ReplyYes();
@@ -202,7 +213,7 @@ int handle_e(char *args)
 
 int handle_login(char *args)
 {
-    int uid;
+    int uid = atoi(args);
     if (cmd_login(uid) == E_SUCCESS)
     {
         ReplyYes();
@@ -227,9 +238,14 @@ FILE *log_file;
 int main(int argc, char *argv[])
 {
     log_init("fs.log");
-
+    int disk_port = atoi(argv[1]);
     assert(BSIZE % sizeof(dinode) == 0);
 
+    if (init_disk_connection("localhost", disk_port) < 0)
+    {
+        Error("Failed to connect to disk server on port %d", disk_port);
+        exit(EXIT_FAILURE);
+    }
     // get disk info and store in global variables
     get_disk_info(&ncyl, &nsec);
 
@@ -239,6 +255,7 @@ int main(int argc, char *argv[])
     static char buf[4096];
     while (1)
     {
+        printf("fs> ");
         fgets(buf, sizeof(buf), stdin);
         if (feof(stdin))
             break;
@@ -261,5 +278,6 @@ int main(int argc, char *argv[])
             break;
     }
 
+    cleanup_disk_connection();
     log_close();
 }
