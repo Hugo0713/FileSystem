@@ -161,7 +161,7 @@ void read_block(int blockno, uchar *buf)
             memcpy(buf, response + 4, data_size);
             memset(buf + data_size, 0, BSIZE - data_size);
         }
-        Log("read_block: successfully read block %d", blockno);
+        // Log("read_block: successfully read block %d", blockno);
     }
     else
     {
@@ -194,7 +194,7 @@ void write_block(int blockno, uchar *buf)
 
     if (strncmp(response, "Yes", 3) == 0)
     {
-        Log("write_block: successfully wrote block %d", blockno);
+        //Log("write_block: successfully wrote block %d", blockno);
     }
     else
     {
