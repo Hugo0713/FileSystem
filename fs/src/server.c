@@ -9,6 +9,7 @@
 #include "block.h"
 #include "common.h"
 #include "fs.h"
+#include "user.h"
 
 int ncyl, nsec;
 
@@ -119,7 +120,7 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
         Warn("Failed to list files");
         return 0;
     }
-    
+
     // 构建文件列表字符串
     char list_data[4096] = "";
     for (int i = 0; i < n; i++)
@@ -128,7 +129,7 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
         snprintf(entry_info, sizeof(entry_info), "%s\n", entries[i].name);
         strcat(list_data, entry_info);
     }
-    
+
     reply_with_yes(wb, list_data, strlen(list_data));
     Log("List files success, %d entries", n);
     free(entries);
@@ -143,7 +144,7 @@ int handle_cat(tcp_buffer *wb, char *args, int len)
 
     if (cmd_cat(name, &buf, &file_len) == E_SUCCESS)
     {
-        reply_with_yes(wb, (char*)buf, file_len);
+        reply_with_yes(wb, (char *)buf, file_len);
         Log("Read file success: %s, length: %d", name, file_len);
         free(buf);
     }
@@ -265,6 +266,37 @@ int handle_login(tcp_buffer *wb, char *args, int len)
     return 0;
 }
 
+int handle_adduser(tcp_buffer *wb, char *args, int len)
+{
+    // 检查参数是否有效
+    if (!args || len <= 0)
+    {
+        reply_with_no(wb, "Invalid arguments for adduser", strlen("Invalid arguments for adduser"));
+        Warn("Invalid arguments for adduser");
+        return 0;
+    }
+    // 解析用户ID
+    int uid = atoi(args);
+    if (uid <= 0 || uid >= MAX_USERS)
+    {
+        reply_with_no(wb, "Invalid user ID", strlen("Invalid user ID"));
+        Warn("Invalid user ID: %d", uid);
+        return 0;
+    }
+
+    if (cmd_adduser(uid) == E_SUCCESS)
+    {
+        reply_with_yes(wb, NULL, 0);
+        Log("Add user success: uid %d", uid);
+    }
+    else
+    {
+        reply_with_no(wb, "Failed to create user", strlen("Failed to create user"));
+        Warn("Failed to create user: uid %d", uid);
+    }
+    return 0;
+}
+
 static struct
 {
     const char *name;
@@ -282,7 +314,9 @@ static struct
     {"i", handle_i},
     {"d", handle_d},
     {"e", handle_e},
-    {"login", handle_login}};
+    {"login", handle_login},
+    {"adduser", handle_adduser}
+};
 
 #define NCMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
 
@@ -293,12 +327,14 @@ void on_connection(int id)
 
 int on_recv(int id, tcp_buffer *wb, char *msg, int len)
 {
-    //char *p = strtok(msg, " \r\n");
+    // char *p = strtok(msg, " \r\n");
     char *newline = strchr(msg, '\n');
-    if (newline) *newline = '\0';
+    if (newline)
+        *newline = '\0';
     newline = strchr(msg, '\r');
-    if (newline) *newline = '\0';
-    
+    if (newline)
+        *newline = '\0';
+
     char *p = strtok(msg, " ");
     int ret = 1;
     for (int i = 0; i < NCMD; i++)

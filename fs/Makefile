@@ -6,13 +6,15 @@ FS_OBJS = src/server.o \
 	src/block.o \
 	src/fs.o \
 	src/inode.o \
-	src/bitmap.o
+	src/bitmap.o \
+	src/user.o
 
 FS_local_OBJS = src/main.o \
 	src/block.o \
 	src/fs.o \
 	src/inode.o \
-	src/bitmap.o
+	src/bitmap.o \
+	src/user.o 
 
 FC_OBJS = src/client.o
 
@@ -21,11 +23,10 @@ test_fs_OBJS = tests/main.o \
 	src/fs.o \
 	src/inode.o \
 	src/bitmap.o \
+	src/user.o \
 	tests/test_block.o \
 	tests/test_fs.o \
 	tests/test_inode.o
-
-test_fc_OBJS = tests/test_fc.o
 
 # Add $(BUILD_DIR) to the beginning of each object file path
 $(foreach exe,$(EXES), \

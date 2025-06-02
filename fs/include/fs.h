@@ -59,5 +59,6 @@ int cmd_i(char *name, uint pos, uint len, const char *data);
 int cmd_d(char *name, uint pos, uint len);
 
 int cmd_login(int auid);
+int cmd_adduser(int uid);
 
 #endif

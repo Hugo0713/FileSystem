@@ -7,6 +7,7 @@
 #include "block.h"
 #include "log.h"
 #include "bitmap.h"
+#include "user.h"
 
 uint current_dir = 0; // 当前目录的 inode 编号
 uint current_uid = 0; // 当前用户的 UID
@@ -143,6 +144,7 @@ int cmd_f(int ncyl, int nsec)
     init_block_bitmap();   // 初始化数据块位图
     init_inode_system();   // 初始化inode位图和inode区域
     init_root_directory(); // 初始化根目录
+    init_user_system();    // 初始化用户系统
 
     // 初始化日志区域（清零）
     uchar buf[BSIZE];
@@ -432,6 +434,18 @@ int add_entry_to_directory(uint dir_inum, char *filename, uint file_inum, short 
 int cmd_mk(char *name, short mode)
 {
     // 参数检查
+    // 检查登录状态
+    if (current_uid == 0)
+    {
+        Error("cmd_mk: please login first");
+        return E_ERROR;
+    }
+    // 检查当前目录写权限
+    if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
+    {
+        Error("cmd_mk: no permission to create file in current directory");
+        return E_ERROR;
+    }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_mk: invalid filename");
@@ -486,6 +500,16 @@ int cmd_mk(char *name, short mode)
 
 int cmd_mkdir(char *name, short mode)
 {
+    if (current_uid == 0)
+    {
+        Error("cmd_mkdir: please login first");
+        return E_ERROR;
+    }
+    if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
+    {
+        Error("cmd_mkdir: no permission to create directory");
+        return E_ERROR;
+    }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_mkdir: invalid directory name");
@@ -692,13 +716,11 @@ void free_file_blocks(inode *ip)
 
 int cmd_rm(char *name)
 {
-    if (name == NULL || strlen(name) == 0)
+    if (current_uid == 0)
     {
-        Error("cmd_rm: invalid filename");
+        Error("cmd_rm: please login first");
         return E_ERROR;
     }
-    Log("cmd_rm: removing file '%s'", name);
-
     // 在当前目录中查找文件
     uint file_inum = find_entry_in_directory(current_dir, name, T_FILE);
     if (file_inum == 0)
@@ -706,6 +728,18 @@ int cmd_rm(char *name)
         Error("cmd_rm: file '%s' not found", name);
         return E_ERROR;
     }
+    // 检查文件写权限（删除需要写权限）
+    if (!check_file_permission(file_inum, current_uid, PERM_WRITE))
+    {
+        Error("cmd_rm: no permission to delete file '%s'", name);
+        return E_ERROR;
+    }
+    if (name == NULL || strlen(name) == 0)
+    {
+        Error("cmd_rm: invalid filename");
+        return E_ERROR;
+    }
+    Log("cmd_rm: removing file '%s'", name);
 
     // 获取文件 inode
     inode *file_ip = iget(file_inum);
@@ -1074,14 +1108,16 @@ int cmd_ls(entry **entries, int *n)
 
 int cmd_cat(char *name, uchar **buf, uint *len)
 {
+    if (current_uid == 0)
+    {
+        Error("cmd_cat: please login first");
+        return E_ERROR;
+    }
     if (name == NULL || strlen(name) == 0 || buf == NULL || len == NULL)
     {
         Error("cmd_cat: invalid parameters");
         return E_ERROR;
     }
-
-    Log("cmd_cat: reading file '%s'", name);
-
     // 在当前目录中查找文件
     uint file_inum = find_entry_in_directory(current_dir, name, T_FILE);
     if (file_inum == 0)
@@ -1089,6 +1125,13 @@ int cmd_cat(char *name, uchar **buf, uint *len)
         Error("cmd_cat: file '%s' not found", name);
         return E_ERROR;
     }
+    // 检查读权限
+    if (!check_file_permission(file_inum, current_uid, PERM_READ))
+    {
+        Error("cmd_cat: no permission to read file '%s'", name);
+        return E_ERROR;
+    }
+    Log("cmd_cat: reading file '%s'", name);
 
     // 获取文件 inode
     inode *file_ip = iget(file_inum);
@@ -1144,6 +1187,11 @@ int cmd_cat(char *name, uchar **buf, uint *len)
 
 int cmd_w(char *name, uint len, const char *data)
 {
+    if (current_uid == 0)
+    {
+        Error("cmd_w: please login first");
+        return E_ERROR;
+    }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_w: invalid filename");
@@ -1154,7 +1202,6 @@ int cmd_w(char *name, uint len, const char *data)
         Error("cmd_w: invalid data pointer");
         return E_ERROR;
     }
-    Log("cmd_w: writing %d bytes to file '%s'", len, name);
 
     // 在当前目录中查找文件
     uint file_inum = find_entry_in_directory(current_dir, name, T_FILE);
@@ -1163,6 +1210,13 @@ int cmd_w(char *name, uint len, const char *data)
         Error("cmd_w: file '%s' not found", name);
         return E_ERROR;
     }
+    // 检查写权限
+    if (!check_file_permission(file_inum, current_uid, PERM_WRITE))
+    {
+        Error("cmd_w: no permission to write file '%s'", name);
+        return E_ERROR;
+    }
+    Log("cmd_w: writing %d bytes to file '%s'", len, name);
 
     // 获取文件 inode
     inode *file_ip = iget(file_inum);
@@ -1429,13 +1483,53 @@ int cmd_d(char *name, uint pos, uint len)
 
 int cmd_login(int auid)
 {
-    if (auid < 0 || auid > 65535)
+    if (auid < 1 || auid >= MAX_USERS)
     {
         Error("cmd_login: invalid user ID %d", auid);
         return E_ERROR;
     }
+    if (!user_exists(auid))
+    {
+        Error("cmd_login: user %d does not exist", auid);
+        return E_ERROR;
+    }
 
     current_uid = auid;
+    current_dir = 0; // 登录后默认进入根目录
     Log("cmd_login: logged in as user %d", auid);
+    return E_SUCCESS;
+}
+
+int cmd_adduser(int uid)
+{
+    // 检查当前用户是否为管理员
+    if (!is_admin_user(current_uid))
+    {
+        Error("cmd_adduser: only admin can add users");
+        return E_ERROR;
+    }
+
+    // 检查用户ID有效性
+    if (uid <= 0 || uid >= MAX_USERS)
+    {
+        Error("cmd_adduser: invalid user ID %d", uid);
+        return E_ERROR;
+    }
+
+    // 检查用户是否已存在
+    if (user_exists(uid))
+    {
+        Error("cmd_adduser: user %d already exists", uid);
+        return E_ERROR;
+    }
+
+    // 创建用户
+    if (create_user(uid) != 0)
+    {
+        Error("cmd_adduser: failed to create user %d", uid);
+        return E_ERROR;
+    }
+
+    Log("cmd_adduser: successfully created user %d", uid);
     return E_SUCCESS;
 }

@@ -3,11 +3,6 @@ build/
 fs/build/
 disk/build/
 
-# Executable files
-FS
-FS_local
-FC
-test_fs
 
 # Log files
 *.log
