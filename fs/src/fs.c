@@ -936,6 +936,11 @@ int cmd_cd(char *path)
         else
         {
             target_inum = find_entry_in_directory(current_dir, path, T_DIR);
+            if (target_inum == 0)
+            {
+                Error("cmd_cd: directory '%s' not found in current directory", path);
+                return E_ERROR;
+            }
         }
     }
 

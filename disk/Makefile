@@ -59,8 +59,7 @@ $(BUILD_DIR)/lib/%.o: ../lib/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILD_DIR)
-	rm -f $(EXES)
+	rm -rf $(BUILD_DIR) $(EXES) *.log  *.img
 
 OBJS = $(foreach exe,$(EXES),$($(exe)_OBJS)) $(LIB_OBJS)
 DEPS = $(OBJS:.o=.d)

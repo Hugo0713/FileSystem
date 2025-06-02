@@ -1,4 +1,4 @@
-EXES = FS FS_local FC test_fs
+EXES = FS FS_local FC test_fs 
 
 BUILD_DIR = build
 
@@ -24,6 +24,8 @@ test_fs_OBJS = tests/main.o \
 	tests/test_block.o \
 	tests/test_fs.o \
 	tests/test_inode.o
+
+test_fc_OBJS = tests/test_fc.o
 
 # Add $(BUILD_DIR) to the beginning of each object file path
 $(foreach exe,$(EXES), \
