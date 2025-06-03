@@ -98,7 +98,7 @@ void handle_response(char *response, char *last_cmd, client_state *state)
 {
     if (strncmp(response, "Yes", 3) == 0)
     {
-        printf("%s\n", response);
+        printf("YES\n%s\n", response+3);
         // 处理登录状态更新
         if (strncmp(last_cmd, "login ", 6) == 0)
         {

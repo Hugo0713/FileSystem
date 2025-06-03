@@ -1074,7 +1074,7 @@ int cmd_ls(entry **entries, int *n)
         return E_ERROR;
     }
 
-    // 过滤掉 "." 和 ".." 条目（如果测试期望不显示它们）
+    // 过滤掉 "." 和 ".." 条目
     uint filtered_count = 0;
     entry *filtered_entries = malloc(valid_count * sizeof(entry));
     if (filtered_entries == NULL && valid_count > 0)
@@ -1086,13 +1086,30 @@ int cmd_ls(entry **entries, int *n)
 
     for (uint i = 0; i < valid_count; i++)
     {
-        // 跳过 "." 和 ".." 条目（根据测试需求）
+        // 跳过 "." 和 ".." 条目
         if (strcmp(temp_entries[i].name, ".") != 0 &&
             strcmp(temp_entries[i].name, "..") != 0)
         {
             if (filtered_entries != NULL)
             {
                 filtered_entries[filtered_count] = temp_entries[i];
+                // 获取 inode 并填充详细信息
+                inode *file_ip = iget(temp_entries[i].inum);
+                if (file_ip != NULL)
+                {
+                    filtered_entries[filtered_count].size = file_ip->size;
+                    filtered_entries[filtered_count].mode = file_ip->mode;
+                    filtered_entries[filtered_count].uid = file_ip->uid;
+                    filtered_entries[filtered_count].type = file_ip->type;
+                    iput(file_ip);
+                }
+                else
+                {
+                    filtered_entries[filtered_count].size = 0;
+                    filtered_entries[filtered_count].mode = 0644;
+                    filtered_entries[filtered_count].uid = 0;
+                    filtered_entries[filtered_count].type = T_FILE;
+                }
             }
             filtered_count++;
         }

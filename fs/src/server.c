@@ -13,6 +13,37 @@
 
 int ncyl, nsec;
 
+// 将权限模式转换为字符串
+static char *mode_to_string(short mode)
+{
+    static char mode_str[10];
+    mode_str[0] = (mode & 0400) ? 'r' : '-'; // 所有者读
+    mode_str[1] = (mode & 0200) ? 'w' : '-'; // 所有者写
+    mode_str[2] = (mode & 0100) ? 'x' : '-'; // 所有者执行
+    mode_str[3] = (mode & 0040) ? 'r' : '-'; // 组读
+    mode_str[4] = (mode & 0020) ? 'w' : '-'; // 组写
+    mode_str[5] = (mode & 0010) ? 'x' : '-'; // 组执行
+    mode_str[6] = (mode & 0004) ? 'r' : '-'; // 其他读
+    mode_str[7] = (mode & 0002) ? 'w' : '-'; // 其他写
+    mode_str[8] = (mode & 0001) ? 'x' : '-'; // 其他执行
+    mode_str[9] = '\0';
+    return mode_str;
+}
+
+// 获取文件类型字符
+static char get_file_type_char(short type)
+{
+    switch (type)
+    {
+    case T_DIR:
+        return 'd';
+    case T_FILE:
+        return '-';
+    default:
+        return '?';
+    }
+}
+
 int handle_f(tcp_buffer *wb, char *args, int len)
 {
     if (cmd_f(ncyl, nsec) == E_SUCCESS)
@@ -31,7 +62,7 @@ int handle_f(tcp_buffer *wb, char *args, int len)
 int handle_mk(tcp_buffer *wb, char *args, int len)
 {
     char *name = args;
-    short mode = 0;
+    short mode = 0644;
     if (cmd_mk(name, mode) == E_SUCCESS)
     {
         reply_with_yes(wb, NULL, 0);
@@ -48,7 +79,7 @@ int handle_mk(tcp_buffer *wb, char *args, int len)
 int handle_mkdir(tcp_buffer *wb, char *args, int len)
 {
     char *name = args;
-    short mode = 0;
+    short mode = 0755;
     if (cmd_mkdir(name, mode) == E_SUCCESS)
     {
         reply_with_yes(wb, NULL, 0);
@@ -117,6 +148,7 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
 {
     entry *entries = NULL;
     int n = 0;
+
     if (cmd_ls(&entries, &n) != E_SUCCESS)
     {
         reply_with_no(wb, "Failed to list files", strlen("Failed to list files"));
@@ -124,18 +156,43 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
         return 0;
     }
 
+    if (n == 0)
+    {
+        reply_with_yes(wb, "", 0);
+        Log("Directory is empty");
+        return 0;
+    }
+
     // 构建文件列表字符串
-    char list_data[4096] = "";
+    char list_data[8192] = "";
+
+    // 添加表头
+    strcat(list_data, "Permissions    UID  Size  Name\n");
+    strcat(list_data, "-------------------------------------\n");
+
+    // 详细格式输出
     for (int i = 0; i < n; i++)
     {
-        char entry_info[256];
-        snprintf(entry_info, sizeof(entry_info), "%s\n", entries[i].name);
+        char entry_info[512];
+        char type_char = get_file_type_char(entries[i].type);
+        char *mode_str = mode_to_string(entries[i].mode);
+
+        snprintf(entry_info, sizeof(entry_info),
+                 "%c%s %3d %8u %s\n",
+                 type_char,        // 文件类型
+                 mode_str,         // 权限
+                 entries[i].uid,   // 所有者UID
+                 entries[i].size,  // 文件大小
+                 entries[i].name); // 文件名
+
         strcat(list_data, entry_info);
     }
 
     reply_with_yes(wb, list_data, strlen(list_data));
-    Log("List files success, %d entries", n);
-    free(entries);
+    Log("List files success, %d entries ", n);
+
+    if (entries)
+        free(entries);
     return 0;
 }
 
@@ -335,8 +392,7 @@ static struct
     {"e", handle_e},
     {"login", handle_login},
     {"adduser", handle_adduser},
-    {"pwd", handle_pwd}
-};
+    {"pwd", handle_pwd}};
 
 #define NCMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
 

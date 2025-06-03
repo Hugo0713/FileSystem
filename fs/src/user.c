@@ -53,6 +53,7 @@ void init_user_system(void)
 }
 
 // 创建新用户
+// 创建新用户
 int create_user(uint uid)
 {
     if (uid == 0 || uid >= MAX_USERS)
@@ -62,13 +63,65 @@ int create_user(uint uid)
     }
 
     // 只有管理员可以创建用户
-    if (current_uid != ADMIN_UID)
+    if (current_uid != 0) // 修改：使用 UID 0 作为管理员
     {
-        Error("create_user: only admin (UID=1) can create users");
+        Error("create_user: only admin (UID=0) can create users");
         return -1;
     }
 
-    // 读取用户信息
+    // 检查用户是否已存在
+    if (user_exists(uid))
+    {
+        Error("create_user: user %d already exists", uid);
+        return -1;
+    }
+
+    // 创建用户主目录
+    char dirname[MAXNAME];
+    snprintf(dirname, MAXNAME, "user_%d", uid);
+
+    // 保存当前上下文
+    uint old_dir = current_dir;
+    uint old_uid = current_uid;
+
+    // 临时切换到根目录，保持管理员权限
+    current_dir = 0; // 根目录
+    // current_uid 保持为 0 (管理员)
+
+    int mkdir_result = cmd_mkdir(dirname, 0755);
+
+    if (mkdir_result != E_SUCCESS)
+    {
+        Error("create_user: failed to create home directory for user %d", uid);
+        current_dir = old_dir;
+        return -1;
+    }
+
+    // 获取新创建目录的inode号
+    uint home_inum = find_entry_in_directory(0, dirname, T_DIR);
+    if (home_inum == 0)
+    {
+        Error("create_user: failed to find created home directory");
+        current_dir = old_dir;
+        return -1;
+    }
+
+    // 修改目录所有者为新用户
+    inode *home_ip = iget(home_inum);
+    if (home_ip)
+    {
+        home_ip->uid = uid;   // 设置为新用户的UID
+        home_ip->mode = 0755; // 确保权限正确
+        home_ip->dirty = 1;
+        iupdate(home_ip);
+        iput(home_ip);
+        Log("create_user: set home directory owner to uid %d", uid);
+    }
+
+    // 恢复原来的上下文
+    current_dir = old_dir;
+
+    // 读取并更新用户信息文件
     inode *user_ip = iget(USER_INFO_INODE);
     if (user_ip == NULL)
     {
@@ -78,44 +131,6 @@ int create_user(uint uid)
 
     user_info users[MAX_USERS];
     int bytes_read = readi(user_ip, (uchar *)users, 0, sizeof(users));
-
-    // 检查用户是否已存在
-    for (int i = 0; i < MAX_USERS; i++)
-    {
-        if (users[i].active && users[i].uid == uid)
-        {
-            Error("create_user: user %d already exists", uid);
-            iput(user_ip);
-            return -1;
-        }
-    }
-
-    // 创建用户主目录
-    char dirname[MAXNAME];
-    snprintf(dirname, MAXNAME, "user_%d", uid);
-
-    // 临时切换到根目录创建用户目录
-    uint old_dir = current_dir;
-    current_dir = 0; // 根目录
-
-    int mkdir_result = cmd_mkdir(dirname, 0755);
-    current_dir = old_dir; // 恢复原目录
-
-    if (mkdir_result != E_SUCCESS)
-    {
-        Error("create_user: failed to create home directory for user %d", uid);
-        iput(user_ip);
-        return -1;
-    }
-
-    // 获取新创建目录的inode号
-    uint home_inum = find_entry_in_directory(0, dirname, T_DIR);
-    if (home_inum == 0)
-    {
-        Error("create_user: failed to find created home directory");
-        iput(user_ip);
-        return -1;
-    }
 
     // 找空位创建用户
     for (int i = 0; i < MAX_USERS; i++)
