@@ -5,6 +5,7 @@
 
 #define MAX_USERS 256
 #define USER_INFO_INODE 1 // 用户信息存储在inode 1
+#define ADMIN_UID 0       // 管理员用户ID
 
 // 简化的用户信息结构
 typedef struct

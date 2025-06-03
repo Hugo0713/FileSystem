@@ -9,14 +9,16 @@
 #include "bitmap.h"
 #include "user.h"
 
-uint current_dir = 0; // 当前目录的 inode 编号
-uint current_uid = 0; // 当前用户的 UID
+uint current_dir = 0;                 // 当前目录的 inode 编号
+uint current_uid = 0;                 // 当前用户的 UID
+static char current_path[1024] = "/"; // 当前路径
 
-void sbinit()
+void sbinit(int ncyl_, int nsec_)
 {
     uchar buf[BSIZE];
     read_block(0, buf);
     memcpy(&sb, buf, sizeof(sb));
+    cmd_f(ncyl_, nsec_); 
 }
 
 // 初始化超级块
@@ -139,6 +141,11 @@ void init_root_directory()
 
 int cmd_f(int ncyl, int nsec)
 {
+    if (current_uid != ADMIN_UID)
+    {
+        Error("cmd_f: only admin (UID=0) can format file system");
+        return E_ERROR;
+    }
     int size = ncyl * nsec;
     init_sb(size);         // 初始化超级块
     init_block_bitmap();   // 初始化数据块位图
@@ -433,13 +440,6 @@ int add_entry_to_directory(uint dir_inum, char *filename, uint file_inum, short 
 
 int cmd_mk(char *name, short mode)
 {
-    // 参数检查
-    // 检查登录状态
-    if (current_uid == 0)
-    {
-        Error("cmd_mk: please login first");
-        return E_ERROR;
-    }
     // 检查当前目录写权限
     if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
     {
@@ -500,11 +500,6 @@ int cmd_mk(char *name, short mode)
 
 int cmd_mkdir(char *name, short mode)
 {
-    if (current_uid == 0)
-    {
-        Error("cmd_mkdir: please login first");
-        return E_ERROR;
-    }
     if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
     {
         Error("cmd_mkdir: no permission to create directory");
@@ -716,11 +711,6 @@ void free_file_blocks(inode *ip)
 
 int cmd_rm(char *name)
 {
-    if (current_uid == 0)
-    {
-        Error("cmd_rm: please login first");
-        return E_ERROR;
-    }
     // 在当前目录中查找文件
     uint file_inum = find_entry_in_directory(current_dir, name, T_FILE);
     if (file_inum == 0)
@@ -939,6 +929,38 @@ uint resolve_absolute_path(char *path)
     return current_inum;
 }
 
+char *get_current_path(void)
+{
+    return current_path;
+}
+void update_current_path(const char *path)
+{
+    if (path[0] == '/')
+    {
+        strcpy(current_path, path);
+    }
+    else if (strcmp(path, "..") == 0)
+    {
+        char *last_slash = strrchr(current_path, '/');
+        if (last_slash && last_slash != current_path)
+        {
+            *last_slash = '\0';
+        }
+        else
+        {
+            strcpy(current_path, "/");
+        }
+    }
+    else if (strcmp(path, ".") != 0)
+    {
+        if (strcmp(current_path, "/") != 0)
+        {
+            strcat(current_path, "/");
+        }
+        strcat(current_path, path);
+    }
+}
+
 int cmd_cd(char *path)
 {
     if (path == NULL)
@@ -992,6 +1014,7 @@ int cmd_cd(char *path)
     // 更新当前目录
     uint old_dir = current_dir;
     current_dir = target_inum;
+    update_current_path(path);
 
     Log("cmd_cd: changed directory from %d to %d (%s)", old_dir, target_inum, path);
     return E_SUCCESS;
@@ -1108,11 +1131,6 @@ int cmd_ls(entry **entries, int *n)
 
 int cmd_cat(char *name, uchar **buf, uint *len)
 {
-    if (current_uid == 0)
-    {
-        Error("cmd_cat: please login first");
-        return E_ERROR;
-    }
     if (name == NULL || strlen(name) == 0 || buf == NULL || len == NULL)
     {
         Error("cmd_cat: invalid parameters");
@@ -1187,11 +1205,6 @@ int cmd_cat(char *name, uchar **buf, uint *len)
 
 int cmd_w(char *name, uint len, const char *data)
 {
-    if (current_uid == 0)
-    {
-        Error("cmd_w: please login first");
-        return E_ERROR;
-    }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_w: invalid filename");
@@ -1483,7 +1496,7 @@ int cmd_d(char *name, uint pos, uint len)
 
 int cmd_login(int auid)
 {
-    if (auid < 1 || auid >= MAX_USERS)
+    if (auid < 0 || auid >= MAX_USERS)
     {
         Error("cmd_login: invalid user ID %d", auid);
         return E_ERROR;
@@ -1496,40 +1509,35 @@ int cmd_login(int auid)
 
     current_uid = auid;
     current_dir = 0; // 登录后默认进入根目录
+    strcpy(current_path, "/");
     Log("cmd_login: logged in as user %d", auid);
     return E_SUCCESS;
 }
 
 int cmd_adduser(int uid)
 {
-    // 检查当前用户是否为管理员
-    if (!is_admin_user(current_uid))
+    if (!is_admin_user(current_uid)) // 检查当前用户是否为管理员
     {
         Error("cmd_adduser: only admin can add users");
         return E_ERROR;
     }
-
     // 检查用户ID有效性
     if (uid <= 0 || uid >= MAX_USERS)
     {
         Error("cmd_adduser: invalid user ID %d", uid);
         return E_ERROR;
     }
-
-    // 检查用户是否已存在
-    if (user_exists(uid))
+    if (user_exists(uid)) // 检查用户是否已存在
     {
         Error("cmd_adduser: user %d already exists", uid);
         return E_ERROR;
     }
-
     // 创建用户
     if (create_user(uid) != 0)
     {
         Error("cmd_adduser: failed to create user %d", uid);
         return E_ERROR;
     }
-
     Log("cmd_adduser: successfully created user %d", uid);
     return E_SUCCESS;
 }

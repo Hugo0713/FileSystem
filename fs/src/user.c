@@ -28,7 +28,7 @@ void init_user_system(void)
         user_ip->type = T_FILE;
         user_ip->mode = 0600; // 只有root可以读写
         user_ip->nlink = 1;
-        user_ip->uid = 1; // 属于管理员
+        user_ip->uid = ADMIN_UID;
         user_ip->size = 0;
         user_ip->dirty = 1;
 
@@ -37,7 +37,7 @@ void init_user_system(void)
         memset(users, 0, sizeof(users));
 
         // 创建管理员用户(UID=1)
-        users[0].uid = 1;
+        users[0].uid = ADMIN_UID;
         users[0].active = 1;
         users[0].is_admin = 1;
         users[0].home_dir_inum = 0; // 管理员使用根目录
@@ -62,7 +62,7 @@ int create_user(uint uid)
     }
 
     // 只有管理员可以创建用户
-    if (current_uid != 1)
+    if (current_uid != ADMIN_UID)
     {
         Error("create_user: only admin (UID=1) can create users");
         return -1;
@@ -78,12 +78,6 @@ int create_user(uint uid)
 
     user_info users[MAX_USERS];
     int bytes_read = readi(user_ip, (uchar *)users, 0, sizeof(users));
-    if (bytes_read != sizeof(users))
-    {
-        Error("create_user: failed to read user info");
-        iput(user_ip);
-        return -1;
-    }
 
     // 检查用户是否已存在
     for (int i = 0; i < MAX_USERS; i++)
@@ -152,7 +146,7 @@ int create_user(uint uid)
 // 检查用户是否存在
 int user_exists(uint uid)
 {
-    if (uid == 0 || uid >= MAX_USERS)
+    if (uid >= MAX_USERS)
         return 0;
 
     inode *user_ip = iget(USER_INFO_INODE);
@@ -179,7 +173,7 @@ int user_exists(uint uid)
 // 检查是否为管理员
 int is_admin_user(uint uid)
 {
-    if (uid == 0 || uid >= MAX_USERS)
+    if (uid >= MAX_USERS)
         return 0;
 
     inode *user_ip = iget(USER_INFO_INODE);
@@ -208,7 +202,7 @@ user_info *get_user_info(uint uid)
 {
     static user_info user;
 
-    if (uid == 0 || uid >= MAX_USERS)
+    if (uid >= MAX_USERS)
         return NULL;
 
     inode *user_ip = iget(USER_INFO_INODE);

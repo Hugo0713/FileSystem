@@ -83,7 +83,10 @@ int handle_cd(tcp_buffer *wb, char *args, int len)
     char *name = args;
     if (cmd_cd(name) == E_SUCCESS)
     {
-        reply_with_yes(wb, NULL, 0);
+        char *current_path = get_current_path();
+        char response[512];
+        snprintf(response, sizeof(response), "Changed to %s", current_path);
+        reply_with_yes(wb, response, strlen(response));
         Log("Change directory success: %s", name);
     }
     else
@@ -277,7 +280,7 @@ int handle_adduser(tcp_buffer *wb, char *args, int len)
     }
     // 解析用户ID
     int uid = atoi(args);
-    if (uid <= 0 || uid >= MAX_USERS)
+    if (uid < 1 || uid >= MAX_USERS)
     {
         reply_with_no(wb, "Invalid user ID", strlen("Invalid user ID"));
         Warn("Invalid user ID: %d", uid);
@@ -293,6 +296,22 @@ int handle_adduser(tcp_buffer *wb, char *args, int len)
     {
         reply_with_no(wb, "Failed to create user", strlen("Failed to create user"));
         Warn("Failed to create user: uid %d", uid);
+    }
+    return 0;
+}
+
+int handle_pwd(tcp_buffer *wb, char *args, int len)
+{
+    char *current_path = get_current_path();
+    if (current_path)
+    {
+        reply_with_yes(wb, current_path, strlen(current_path));
+        Log("Current directory: %s", current_path);
+    }
+    else
+    {
+        reply_with_no(wb, "Failed to get current directory", strlen("Failed to get current directory"));
+        Warn("Failed to get current directory");
     }
     return 0;
 }
@@ -315,7 +334,8 @@ static struct
     {"d", handle_d},
     {"e", handle_e},
     {"login", handle_login},
-    {"adduser", handle_adduser}
+    {"adduser", handle_adduser},
+    {"pwd", handle_pwd}
 };
 
 #define NCMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
@@ -386,7 +406,7 @@ int main(int argc, char *argv[])
 
     // 获取磁盘信息并初始化文件系统
     get_disk_info(&ncyl, &nsec);
-    sbinit();
+    sbinit(ncyl, nsec);
 
     Log("File system server starting on port %d, connected to disk server on port %d", fs_port, disk_port);
 

@@ -9,6 +9,8 @@
 #include "mintest.h"
 #include "log.h"
 
+int ncyl, nsec;
+
 static void format()
 {
     cmd_login(1);
