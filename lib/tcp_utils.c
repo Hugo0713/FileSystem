@@ -227,6 +227,7 @@ int server_run(tcp_server_ *server)
         server->pool.ready_set = server->pool.read_set;
         // wait for a client to be ready
         server->pool.nready = select(server->pool.maxfd + 1, &server->pool.ready_set, NULL, NULL, NULL);
+        if (server->pool.nready < 0) continue;
         // if listenfd is ready, a new client is connecting
         if (FD_ISSET(server->listenfd, &server->pool.ready_set))
         {

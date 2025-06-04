@@ -2,6 +2,7 @@
     "files.associations": {
         "*.cu": "cuda-cpp",
         "mintest.h": "c",
-        "bitmap.h": "c"
+        "bitmap.h": "c",
+        "fs_internal.h": "c"
     }
 }

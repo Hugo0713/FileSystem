@@ -127,6 +127,10 @@ void handle_response(char *response, char *last_cmd, client_state *state)
             printf("Error: Command failed\n");
         }
     }
+    else if (strcmp(response, "Unknown command") == 0)
+    {
+        printf("Unknown command: %s\n", last_cmd);
+    }
 }
 
 int main(int argc, char *argv[])

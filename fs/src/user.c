@@ -1,5 +1,6 @@
 #include "user.h"
 #include "fs.h"
+#include "fs_internal.h"
 #include "inode.h"
 #include "log.h"
 #include <string.h>
@@ -52,7 +53,6 @@ void init_user_system(void)
     iput(user_ip);
 }
 
-// 创建新用户
 // 创建新用户
 int create_user(uint uid)
 {
