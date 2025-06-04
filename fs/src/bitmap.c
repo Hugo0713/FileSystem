@@ -1,5 +1,6 @@
 #include "bitmap.h"
 #include "block.h"
+#include "inode.h"
 #include "log.h"
 #include <string.h>
 

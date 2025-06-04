@@ -35,6 +35,8 @@ uint allocate_block();
 void free_block(uint bno); 
 
 void get_disk_info(int *ncyl, int *nsec);
+void raw_read_block(int blockno, uchar *buf);
+void raw_write_block(int blockno, uchar *buf);
 void read_block(int blockno, uchar *buf);
 void write_block(int blockno, uchar *buf);
 

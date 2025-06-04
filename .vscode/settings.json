@@ -3,6 +3,7 @@
         "*.cu": "cuda-cpp",
         "mintest.h": "c",
         "bitmap.h": "c",
-        "fs_internal.h": "c"
+        "fs_internal.h": "c",
+        "simple_cache.h": "c"
     }
 }

@@ -1,7 +1,7 @@
 #ifndef BITMAP_H
 #define BITMAP_H
 
-#include "fs.h"
+#include "common.h"
 
 // 位图类型
 typedef enum

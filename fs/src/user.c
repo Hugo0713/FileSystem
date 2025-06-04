@@ -166,7 +166,10 @@ int user_exists(uint uid)
 
     inode *user_ip = iget(USER_INFO_INODE);
     if (user_ip == NULL)
+    {
+        Error("user_exists: failed to get user info inode");
         return 0;
+    }
 
     user_info users[MAX_USERS];
     int bytes_read = readi(user_ip, (uchar *)users, 0, sizeof(users));

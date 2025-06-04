@@ -1,4 +1,5 @@
 #include "block.h"
+#include "simple_cache.h"
 
 #include <string.h>
 
@@ -128,7 +129,7 @@ void block_to_cyl_sec(int blockno, int *cyl, int *sec)
     *sec = blockno % nsec;
 }
 
-void read_block(int blockno, uchar *buf)
+void raw_read_block(int blockno, uchar *buf)
 {
     if (!disk_client)
     {
@@ -170,7 +171,7 @@ void read_block(int blockno, uchar *buf)
     }
 }
 
-void write_block(int blockno, uchar *buf)
+void raw_write_block(int blockno, uchar *buf)
 {
     if (!disk_client)
     {
@@ -202,6 +203,18 @@ void write_block(int blockno, uchar *buf)
     }
 }
 
+// 修改 read_block 函数使用缓存
+void read_block(int blockno, uchar *buf)
+{
+    cached_read_block(blockno, buf);
+}
+
+// 修改 write_block 函数使用缓存
+void write_block(int blockno, uchar *buf)
+{
+    cached_write_block(blockno, buf);
+}
+
 void init_block_bitmap()
 {
     // 清空所有数据块位图
@@ -216,6 +229,5 @@ void init_block_bitmap()
         Error("init_block_bitmap: failed to mark system blocks");
         return;
     }
-
     Log("Block bitmap initialized successfully");
 }

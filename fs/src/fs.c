@@ -1,5 +1,6 @@
 #include "fs.h"
 #include "fs_internal.h"
+#include "simple_cache.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -19,7 +20,8 @@ void sbinit(int ncyl_, int nsec_)
     uchar buf[BSIZE];
     read_block(0, buf);
     memcpy(&sb, buf, sizeof(sb));
-    cmd_f(ncyl_, nsec_);
+    cmd_f(ncyl_, nsec_); // 格式化文件系统
+    cache_init();        // 初始化缓存系统
 }
 char *get_current_path(void)
 {
@@ -77,6 +79,7 @@ int cmd_f(int ncyl, int nsec)
 
     Log("File system formatted successfully");
     Log("Total blocks: %d, Data blocks: %d, Inodes: %d", sb.size, sb.ndatablocks, sb.ninodes);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -137,6 +140,7 @@ int cmd_mk(char *name, short mode)
 
     Log("cmd_mk: successfully created file '%s' with inode %d", name, ip->inum);
     iput(ip);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -226,6 +230,7 @@ int cmd_mkdir(char *name, short mode)
 
     Log("cmd_mkdir: successfully created directory '%s' with inode %d", name, ip->inum);
     iput(ip);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -297,6 +302,7 @@ int cmd_rm(char *name)
         return E_ERROR;
     }
     Log("cmd_rm: successfully removed file '%s'", name);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -392,6 +398,7 @@ int cmd_rmdir(char *name)
     }
 
     Log("cmd_rmdir: successfully removed directory '%s'", name);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -713,6 +720,7 @@ int cmd_w(char *name, uint len, const char *data)
 
     iput(file_ip);
     Log("cmd_w: successfully wrote %d bytes to file '%s'", len, name);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -829,6 +837,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
         free(original_data);
     iput(file_ip);
     Log("cmd_i: successfully inserted %d bytes to file '%s' at position %d", len, name, pos);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -940,6 +949,7 @@ int cmd_d(char *name, uint pos, uint len)
     free(original_data);
     iput(file_ip);
     Log("cmd_d: successfully deleted %d bytes from file '%s' at position %d", actual_delete_len, name, pos);
+    cache_flush();
     return E_SUCCESS;
 }
 
@@ -986,5 +996,6 @@ int cmd_adduser(int uid)
         return E_ERROR;
     }
     Log("cmd_adduser: successfully created user %d", uid);
+    cache_flush();
     return E_SUCCESS;
 }
