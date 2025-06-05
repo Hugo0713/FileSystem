@@ -11,7 +11,8 @@ FS_OBJS = src/server.o \
 	src/inode.o \
 	src/bitmap.o \
 	src/user.o \
-	src/simple_cache.o 
+	src/simple_cache.o \
+	src/connection.o 
 
 FS_local_OBJS = src/main.o \
 	src/block.o \
@@ -22,7 +23,8 @@ FS_local_OBJS = src/main.o \
 	src/inode.o \
 	src/bitmap.o \
 	src/user.o \
-	src/simple_cache.o 
+	src/simple_cache.o \
+	src/connection.o 
 
 FC_OBJS = src/client.o
 
@@ -36,6 +38,7 @@ test_fs_OBJS = tests/main.o \
 	src/bitmap.o \
 	src/user.o \
 	src/simple_cache.o \
+	src/connection.o \
 	tests/test_block.o \
 	tests/test_fs.o \
 	tests/test_inode.o

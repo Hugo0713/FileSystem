@@ -10,6 +10,7 @@
 #include "common.h"
 #include "fs.h"
 #include "user.h"
+#include "connection.h"
 
 int ncyl, nsec;
 
@@ -398,6 +399,7 @@ static struct
 
 void on_connection(int id)
 {
+    init_connection(id);
     Log("Client %d connected", id);
 }
 
@@ -433,6 +435,7 @@ int on_recv(int id, tcp_buffer *wb, char *msg, int len)
 
 void cleanup(int id)
 {
+    cleanup_connection(id);
     Log("Client %d disconnected", id);
 }
 
