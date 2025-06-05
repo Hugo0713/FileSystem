@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "block.h"
 #include "log.h"
@@ -14,6 +15,14 @@
 uint current_dir = 0;                 // 当前目录的 inode 编号
 uint current_uid = 0;                 // 当前用户的 UID
 static char current_path[1024] = "/"; // 当前路径
+
+// 全局读写锁
+static pthread_rwlock_t fs_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+
+// 简化的锁定宏
+#define FS_READ_LOCK()    pthread_rwlock_rdlock(&fs_rwlock)
+#define FS_WRITE_LOCK()   pthread_rwlock_wrlock(&fs_rwlock)
+#define FS_UNLOCK()       pthread_rwlock_unlock(&fs_rwlock)
 
 void sbinit(int ncyl_, int nsec_)
 {
@@ -85,20 +94,24 @@ int cmd_f(int ncyl, int nsec)
 
 int cmd_mk(char *name, short mode)
 {
+    FS_WRITE_LOCK();
     // 检查当前目录写权限
     if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
     {
         Error("cmd_mk: no permission to create file in current directory");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_mk: invalid filename");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (strlen(name) >= MAXNAME)
     {
         Error("cmd_mk: filename too long (max %d characters)", MAXNAME - 1);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_mk: creating file '%s' with mode %o", name, mode);
@@ -108,6 +121,7 @@ int cmd_mk(char *name, short mode)
     if (existing_inum != 0)
     {
         Error("cmd_mk: entry '%s' already exists", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -116,6 +130,7 @@ int cmd_mk(char *name, short mode)
     if (ip == NULL)
     {
         Error("cmd_mk: failed to allocate inode for file '%s'", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -135,30 +150,36 @@ int cmd_mk(char *name, short mode)
     {
         Error("cmd_mk: failed to add file to directory");
         iput(ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
     Log("cmd_mk: successfully created file '%s' with inode %d", name, ip->inum);
     iput(ip);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_mkdir(char *name, short mode)
 {
+    FS_WRITE_LOCK();
     if (!check_file_permission(current_dir, current_uid, PERM_WRITE))
     {
         Error("cmd_mkdir: no permission to create directory");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_mkdir: invalid directory name");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (strlen(name) >= MAXNAME)
     {
         Error("cmd_mkdir: directory name too long (max %d characters)", MAXNAME - 1);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_mkdir: creating directory '%s' with mode %o", name, mode);
@@ -168,6 +189,7 @@ int cmd_mkdir(char *name, short mode)
     if (existing_inum != 0)
     {
         Error("cmd_mkdir: entry '%s' already exists", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -176,6 +198,7 @@ int cmd_mkdir(char *name, short mode)
     if (ip == NULL)
     {
         Error("cmd_mkdir: failed to allocate inode for directory '%s'", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -193,6 +216,7 @@ int cmd_mkdir(char *name, short mode)
     {
         Error("cmd_mkdir: no free blocks available for directory '%s'", name);
         iput(ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
     ip->addrs[0] = dir_data_block;
@@ -205,6 +229,7 @@ int cmd_mkdir(char *name, short mode)
         Error("cmd_mkdir: failed to initialize directory entries");
         free_block(dir_data_block);
         iput(ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -215,6 +240,7 @@ int cmd_mkdir(char *name, short mode)
         Error("cmd_mkdir: failed to add directory to parent");
         free_block(dir_data_block);
         iput(ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -231,27 +257,32 @@ int cmd_mkdir(char *name, short mode)
     Log("cmd_mkdir: successfully created directory '%s' with inode %d", name, ip->inum);
     iput(ip);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_rm(char *name)
 {
+    FS_WRITE_LOCK();
     // 在当前目录中查找文件
     uint file_inum = find_entry_in_directory(current_dir, name, T_FILE);
     if (file_inum == 0)
     {
         Error("cmd_rm: file '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 检查文件写权限（删除需要写权限）
     if (!check_file_permission(file_inum, current_uid, PERM_WRITE))
     {
         Error("cmd_rm: no permission to delete file '%s'", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_rm: invalid filename");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_rm: removing file '%s'", name);
@@ -261,12 +292,14 @@ int cmd_rm(char *name)
     if (file_ip == NULL)
     {
         Error("cmd_rm: failed to get file inode %d", file_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (file_ip->type != T_FILE)
     {
         Error("cmd_rm: '%s' is not a file", name);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -299,24 +332,29 @@ int cmd_rm(char *name)
     if (result < 0)
     {
         Error("cmd_rm: failed to remove file from directory");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_rm: successfully removed file '%s'", name);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_rmdir(char *name)
 {
+    FS_WRITE_LOCK();
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_rmdir: invalid directory name");
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 不允许删除特殊目录
     if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
     {
         Error("cmd_rmdir: cannot remove '.' or '..' directory");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_rmdir: removing directory '%s'", name);
@@ -326,6 +364,7 @@ int cmd_rmdir(char *name)
     if (dir_inum == 0)
     {
         Error("cmd_rmdir: directory '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -333,6 +372,7 @@ int cmd_rmdir(char *name)
     if (dir_inum == 0)
     {
         Error("cmd_rmdir: cannot remove root directory");
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -341,11 +381,13 @@ int cmd_rmdir(char *name)
     if (empty_result < 0)
     {
         Error("cmd_rmdir: failed to check if directory is empty");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (empty_result == 0)
     {
         Error("cmd_rmdir: directory '%s' is not empty", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -354,12 +396,14 @@ int cmd_rmdir(char *name)
     if (dir_ip == NULL)
     {
         Error("cmd_rmdir: failed to get directory inode %d", dir_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (dir_ip->type != T_DIR)
     {
         Error("cmd_rmdir: '%s' is not a directory", name);
         iput(dir_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_rmdir: freeing directory data for '%s'", name);
@@ -381,6 +425,7 @@ int cmd_rmdir(char *name)
     if (result < 0)
     {
         Error("cmd_rmdir: failed to remove directory from parent");
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -399,14 +444,17 @@ int cmd_rmdir(char *name)
 
     Log("cmd_rmdir: successfully removed directory '%s'", name);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_cd(char *path)
 {
+    FS_WRITE_LOCK();
     if (path == NULL)
     {
         Error("cmd_cd: invalid path");
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -417,6 +465,7 @@ int cmd_cd(char *path)
         {
             target_inum = 0;           // 根目录
             current_dir = target_inum; // 更新当前目录为根目录
+            FS_UNLOCK();
             return E_SUCCESS;
         }
         else
@@ -436,6 +485,7 @@ int cmd_cd(char *path)
             if (target_inum == 0)
             {
                 Error("cmd_cd: directory '%s' not found in current directory", path);
+                FS_UNLOCK();
                 return E_ERROR;
             }
         }
@@ -447,8 +497,11 @@ int cmd_cd(char *path)
     {
         Error("cmd_cd: '%s' is not a directory", path);
         if (target_ip)
+        {
             iput(target_ip);
-        return E_ERROR;
+            FS_UNLOCK();
+            return E_ERROR;
+        }
     }
     iput(target_ip);
 
@@ -458,13 +511,16 @@ int cmd_cd(char *path)
     update_current_path(path);
 
     Log("cmd_cd: changed directory from %d to %d (%s)", old_dir, target_inum, path);
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 int cmd_ls(entry **entries, int *n)
 {
+    FS_READ_LOCK();
     if (entries == NULL || n == NULL)
     {
         Error("cmd_ls: invalid output parameters");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_ls: listing directory %d", current_dir);
@@ -474,12 +530,14 @@ int cmd_ls(entry **entries, int *n)
     if (dir_ip == NULL)
     {
         Error("cmd_ls: failed to get current directory inode %d", current_dir);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (dir_ip->type != T_DIR)
     {
         Error("cmd_ls: current inode %d is not a directory", current_dir);
         iput(dir_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -490,6 +548,7 @@ int cmd_ls(entry **entries, int *n)
         *entries = NULL;
         *n = 0;
         iput(dir_ip);
+        FS_UNLOCK();
         return E_SUCCESS; // 空目录返回成功
     }
     iput(dir_ip); // 释放 dir_ip
@@ -500,6 +559,7 @@ int cmd_ls(entry **entries, int *n)
     if (temp_entries == NULL)
     {
         Error("cmd_ls: failed to allocate memory for temp entries");
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -510,6 +570,7 @@ int cmd_ls(entry **entries, int *n)
     {
         Error("cmd_ls: failed to collect directory entries");
         free(temp_entries);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -520,6 +581,7 @@ int cmd_ls(entry **entries, int *n)
     {
         Error("cmd_ls: failed to allocate filtered entries array");
         free(temp_entries);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -582,14 +644,17 @@ int cmd_ls(entry **entries, int *n)
     *n = (int)filtered_count;
 
     Log("cmd_ls: found %d entries in directory %d", filtered_count, current_dir);
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_cat(char *name, uchar **buf, uint *len)
 {
+    FS_READ_LOCK();
     if (name == NULL || strlen(name) == 0 || buf == NULL || len == NULL)
     {
         Error("cmd_cat: invalid parameters");
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 在当前目录中查找文件
@@ -597,12 +662,14 @@ int cmd_cat(char *name, uchar **buf, uint *len)
     if (file_inum == 0)
     {
         Error("cmd_cat: file '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 检查读权限
     if (!check_file_permission(file_inum, current_uid, PERM_READ))
     {
         Error("cmd_cat: no permission to read file '%s'", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_cat: reading file '%s'", name);
@@ -612,12 +679,14 @@ int cmd_cat(char *name, uchar **buf, uint *len)
     if (file_ip == NULL)
     {
         Error("cmd_cat: failed to get file inode %d", file_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (file_ip->type != T_FILE)
     {
         Error("cmd_cat: '%s' is not a file", name);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -628,6 +697,7 @@ int cmd_cat(char *name, uchar **buf, uint *len)
         *buf = NULL;
         *len = 0;
         iput(file_ip);
+        FS_UNLOCK();
         return E_SUCCESS;
     }
 
@@ -637,6 +707,7 @@ int cmd_cat(char *name, uchar **buf, uint *len)
     {
         Error("cmd_cat: failed to allocate buffer for file content (size: %d)", file_ip->size);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -647,6 +718,7 @@ int cmd_cat(char *name, uchar **buf, uint *len)
         Error("cmd_cat: failed to read file content (expected %d, got %d)", file_ip->size, bytes_read);
         free(file_buf);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -656,19 +728,23 @@ int cmd_cat(char *name, uchar **buf, uint *len)
     int file_size = file_ip->size;
     iput(file_ip);
     Log("cmd_cat: successfully read %d bytes from file '%s'", file_size, name);
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_w(char *name, uint len, const char *data)
 {
+    FS_WRITE_LOCK();
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_w: invalid filename");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (len > 0 && data == NULL)
     {
         Error("cmd_w: invalid data pointer");
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -677,12 +753,14 @@ int cmd_w(char *name, uint len, const char *data)
     if (file_inum == 0)
     {
         Error("cmd_w: file '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 检查写权限
     if (!check_file_permission(file_inum, current_uid, PERM_WRITE))
     {
         Error("cmd_w: no permission to write file '%s'", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_w: writing %d bytes to file '%s'", len, name);
@@ -692,6 +770,7 @@ int cmd_w(char *name, uint len, const char *data)
     if (file_ip == NULL)
     {
         Error("cmd_w: failed to get file inode %d", file_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -699,6 +778,7 @@ int cmd_w(char *name, uint len, const char *data)
     {
         Error("cmd_w: '%s' is not a file", name);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -714,6 +794,7 @@ int cmd_w(char *name, uint len, const char *data)
         {
             Error("cmd_w: failed to write data (expected %d, wrote %d)", len, bytes_written);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -721,19 +802,23 @@ int cmd_w(char *name, uint len, const char *data)
     iput(file_ip);
     Log("cmd_w: successfully wrote %d bytes to file '%s'", len, name);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_i(char *name, uint pos, uint len, const char *data)
 {
+    FS_WRITE_LOCK();
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_i: invalid filename");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (len > 0 && data == NULL)
     {
         Error("cmd_i: invalid data pointer");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_i: inserting %d bytes to file '%s' at position %d", len, name, pos);
@@ -743,6 +828,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
     if (file_inum == 0)
     {
         Error("cmd_i: file '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -751,12 +837,14 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
     if (file_ip == NULL)
     {
         Error("cmd_i: failed to get file inode %d", file_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (file_ip->type != T_FILE)
     {
         Error("cmd_i: '%s' is not a file", name);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -765,12 +853,14 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
     {
         Error("cmd_i: insert position %d exceeds file size %d", pos, file_ip->size);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (len == 0) // 如果没有数据要插入
     {
         Log("cmd_i: no data to insert");
         iput(file_ip);
+        FS_UNLOCK();
         return E_SUCCESS;
     }
 
@@ -787,6 +877,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
             Error("cmd_i: failed to read original file content");
             free(original_data);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -804,6 +895,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
             if (original_data)
                 free(original_data);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -816,6 +908,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
         if (original_data)
             free(original_data);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -829,6 +922,7 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
             if (original_data)
                 free(original_data);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -838,14 +932,17 @@ int cmd_i(char *name, uint pos, uint len, const char *data)
     iput(file_ip);
     Log("cmd_i: successfully inserted %d bytes to file '%s' at position %d", len, name, pos);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_d(char *name, uint pos, uint len)
 {
+    FS_WRITE_LOCK();
     if (name == NULL || strlen(name) == 0)
     {
         Error("cmd_d: invalid filename");
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_d: deleting %d bytes from file '%s' at position %d", len, name, pos);
@@ -855,6 +952,7 @@ int cmd_d(char *name, uint pos, uint len)
     if (file_inum == 0)
     {
         Error("cmd_d: file '%s' not found", name);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -863,12 +961,14 @@ int cmd_d(char *name, uint pos, uint len)
     if (file_ip == NULL)
     {
         Error("cmd_d: failed to get file inode %d", file_inum);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (file_ip->type != T_FILE)
     {
         Error("cmd_d: '%s' is not a file", name);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -877,6 +977,7 @@ int cmd_d(char *name, uint pos, uint len)
     {
         Error("cmd_d: delete position %d exceeds file size %d", pos, file_ip->size);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
     // 如果没有数据要删除
@@ -884,6 +985,7 @@ int cmd_d(char *name, uint pos, uint len)
     {
         Log("cmd_d: no data to delete");
         iput(file_ip);
+        FS_UNLOCK();
         return E_SUCCESS;
     }
 
@@ -902,6 +1004,7 @@ int cmd_d(char *name, uint pos, uint len)
     {
         Error("cmd_d: failed to allocate buffer for original data");
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -911,6 +1014,7 @@ int cmd_d(char *name, uint pos, uint len)
         Error("cmd_d: failed to read original file content");
         free(original_data);
         iput(file_ip);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -927,6 +1031,7 @@ int cmd_d(char *name, uint pos, uint len)
             Error("cmd_d: failed to write pre-delete data");
             free(original_data);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -942,6 +1047,7 @@ int cmd_d(char *name, uint pos, uint len)
             Error("cmd_d: failed to write post-delete data");
             free(original_data);
             iput(file_ip);
+            FS_UNLOCK();
             return E_ERROR;
         }
     }
@@ -950,19 +1056,23 @@ int cmd_d(char *name, uint pos, uint len)
     iput(file_ip);
     Log("cmd_d: successfully deleted %d bytes from file '%s' at position %d", actual_delete_len, name, pos);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_login(int auid)
 {
+    FS_WRITE_LOCK();
     if (auid < 0 || auid >= MAX_USERS)
     {
         Error("cmd_login: invalid user ID %d", auid);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (!user_exists(auid))
     {
         Error("cmd_login: user %d does not exist", auid);
+        FS_UNLOCK();
         return E_ERROR;
     }
 
@@ -970,32 +1080,39 @@ int cmd_login(int auid)
     current_dir = 0; // 登录后默认进入根目录
     strcpy(current_path, "/");
     Log("cmd_login: logged in as user %d", auid);
+    FS_UNLOCK();
     return E_SUCCESS;
 }
 
 int cmd_adduser(int uid)
 {
+    FS_WRITE_LOCK();
     if (!is_admin_user(current_uid)) // 检查当前用户是否为管理员
     {
         Error("cmd_adduser: only admin can add users");
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (uid <= 0 || uid >= MAX_USERS) // 检查用户ID有效性
     {
         Error("cmd_adduser: invalid user ID %d", uid);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (user_exists(uid)) // 检查用户是否已存在
     {
         Error("cmd_adduser: user %d already exists", uid);
+        FS_UNLOCK();
         return E_ERROR;
     }
     if (create_user(uid) != 0) // 创建用户
     {
         Error("cmd_adduser: failed to create user %d", uid);
+        FS_UNLOCK();
         return E_ERROR;
     }
     Log("cmd_adduser: successfully created user %d", uid);
     cache_flush();
+    FS_UNLOCK();
     return E_SUCCESS;
 }

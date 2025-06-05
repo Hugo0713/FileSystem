@@ -6,6 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+static connection_state connections[MAX_CONNECTIONS];
+static int connections_init = 0;
+
 // 初始化用户系统
 void init_user_system(void)
 {
@@ -277,4 +280,90 @@ int check_file_permission(uint file_inum, uint uid, int operation)
         return 1;
 
     return 0;
+}
+
+// 初始化连接状态
+static void init_connections(void)
+{
+    if (connections_init)
+        return;
+
+    for (int i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        connections[i].connection_id = -1;
+        connections[i].current_dir = 0;
+        connections[i].current_uid = 0;
+    }
+    connections_init = 1;
+}
+
+// 设置连接状态
+void set_connection_state(int connection_id, uint dir, uint uid)
+{
+    if (!connections_init)
+        init_connections();
+
+    // 查找现有连接或空槽位
+    for (int i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        if (connections[i].connection_id == connection_id ||
+            connections[i].connection_id == -1)
+        {
+            connections[i].connection_id = connection_id;
+            connections[i].current_dir = dir;
+            connections[i].current_uid = uid;
+            return;
+        }
+    }
+}
+
+// 获取连接的当前目录
+uint get_connection_dir(int connection_id)
+{
+    if (!connections_init)
+        return current_dir; // 返回全局默认值
+
+    for (int i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        if (connections[i].connection_id == connection_id)
+        {
+            return connections[i].current_dir;
+        }
+    }
+    return current_dir; // 未找到时返回全局默认值
+}
+
+// 获取连接的当前用户
+uint get_connection_uid(int connection_id)
+{
+    if (!connections_init)
+        return current_uid; // 返回全局默认值
+
+    for (int i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        if (connections[i].connection_id == connection_id)
+        {
+            return connections[i].current_uid;
+        }
+    }
+    return current_uid; // 未找到时返回全局默认值
+}
+
+// 移除连接
+void remove_connection(int connection_id)
+{
+    if (!connections_init)
+        return;
+
+    for (int i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        if (connections[i].connection_id == connection_id)
+        {
+            connections[i].connection_id = -1;
+            connections[i].current_dir = 0;
+            connections[i].current_uid = 0;
+            Log("Removed connection %d state", connection_id);
+            return;
+        }
+    }
 }
