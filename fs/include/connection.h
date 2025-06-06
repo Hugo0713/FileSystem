@@ -4,6 +4,7 @@
 #include "common.h"
 
 #define MAX_CONNECTIONS 16
+#define CONNECTION_DISABLED 1
 
 // 连接状态结构
 typedef struct

@@ -13,6 +13,8 @@
 #include "connection.h"
 
 int ncyl, nsec;
+static int current_connection_id = 0; // 当前连接ID
+extern uint current_dir, current_uid;         // 当前目录和用户ID
 
 // 将权限模式转换为字符串
 static char *mode_to_string(short mode)
@@ -110,25 +112,6 @@ int handle_rm(tcp_buffer *wb, char *args, int len)
     return 0;
 }
 
-int handle_cd(tcp_buffer *wb, char *args, int len)
-{
-    char *name = args;
-    if (cmd_cd(name) == E_SUCCESS)
-    {
-        char *current_path = get_current_path();
-        char response[512];
-        snprintf(response, sizeof(response), "Changed to %s", current_path);
-        reply_with_yes(wb, response, strlen(response));
-        Log("Change directory success: %s", name);
-    }
-    else
-    {
-        reply_with_no(wb, "Failed to change directory", strlen("Failed to change directory"));
-        Warn("Failed to change directory: %s", name);
-    }
-    return 0;
-}
-
 int handle_rmdir(tcp_buffer *wb, char *args, int len)
 {
     char *name = args;
@@ -145,8 +128,29 @@ int handle_rmdir(tcp_buffer *wb, char *args, int len)
     return 0;
 }
 
+int handle_cd(tcp_buffer *wb, char *args, int len)
+{
+    char *name = args;
+    if (cmd_cd(name) == E_SUCCESS)
+    {
+        char *current_path = get_current_path();
+        char response[512];
+        snprintf(response, sizeof(response), "Changed to %s", current_path);
+        reply_with_yes(wb, response, strlen(response));
+        Log("Change directory success: %s", name);
+    }
+    else
+    {
+        reply_with_no(wb, "Failed to change directory", strlen("Failed to change directory"));
+        Warn("Failed to change directory: %s", name);
+    }
+
+    return 0;
+}
+
 int handle_ls(tcp_buffer *wb, char *args, int len)
 {
+    
     entry *entries = NULL;
     int n = 0;
 
@@ -192,6 +196,7 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
     reply_with_yes(wb, list_data, strlen(list_data));
     Log("List files success, %d entries ", n);
 
+
     if (entries)
         free(entries);
     return 0;
@@ -199,6 +204,7 @@ int handle_ls(tcp_buffer *wb, char *args, int len)
 
 int handle_cat(tcp_buffer *wb, char *args, int len)
 {
+    
     char *name = args;
     uchar *buf = NULL;
     uint file_len;
@@ -214,11 +220,13 @@ int handle_cat(tcp_buffer *wb, char *args, int len)
         reply_with_no(wb, "Failed to read file", strlen("Failed to read file"));
         Warn("Failed to read file: %s", name);
     }
+
     return 0;
 }
 
 int handle_w(tcp_buffer *wb, char *args, int len)
 {
+    
     char *name = strtok(args, " ");
     char *len_str = strtok(NULL, " ");
     char *data = strtok(NULL, " ");
@@ -241,11 +249,13 @@ int handle_w(tcp_buffer *wb, char *args, int len)
         reply_with_no(wb, "Failed to write file", strlen("Failed to write file"));
         Warn("Failed to write file: %s", name);
     }
+
     return 0;
 }
 
 int handle_i(tcp_buffer *wb, char *args, int len)
 {
+    
     char *name = strtok(args, " ");
     char *pos_str = strtok(NULL, " ");
     char *len_str = strtok(NULL, " ");
@@ -271,6 +281,7 @@ int handle_i(tcp_buffer *wb, char *args, int len)
         reply_with_no(wb, "Failed to insert data", strlen("Failed to insert data"));
         Warn("Failed to insert data: %s", name);
     }
+
     return 0;
 }
 
@@ -300,6 +311,7 @@ int handle_d(tcp_buffer *wb, char *args, int len)
         reply_with_no(wb, "Failed to delete data", strlen("Failed to delete data"));
         Warn("Failed to delete data: %s", name);
     }
+
     return 0;
 }
 
@@ -313,6 +325,7 @@ int handle_e(tcp_buffer *wb, char *args, int len)
 
 int handle_login(tcp_buffer *wb, char *args, int len)
 {
+
     int uid = atoi(args);
     if (cmd_login(uid) == E_SUCCESS)
     {
@@ -324,11 +337,13 @@ int handle_login(tcp_buffer *wb, char *args, int len)
         reply_with_no(wb, "Failed to login", strlen("Failed to login"));
         Warn("Failed to login: uid %d", uid);
     }
+
     return 0;
 }
 
 int handle_adduser(tcp_buffer *wb, char *args, int len)
 {
+
     // 检查参数是否有效
     if (!args || len <= 0)
     {
@@ -405,6 +420,7 @@ void on_connection(int id)
 
 int on_recv(int id, tcp_buffer *wb, char *msg, int len)
 {
+    current_connection_id = id; // 设置当前连接ID
     // char *p = strtok(msg, " \r\n");
     char *newline = strchr(msg, '\n');
     if (newline)

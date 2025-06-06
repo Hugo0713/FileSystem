@@ -29,7 +29,10 @@ void sbinit(int ncyl_, int nsec_)
     uchar buf[BSIZE];
     read_block(0, buf);
     memcpy(&sb, buf, sizeof(sb));
-    cmd_f(ncyl_, nsec_); // 格式化文件系统
+    if (sb.magic != MAGIC)
+    {
+        cmd_f(ncyl_, nsec_); // 格式化文件系统
+    }
     cache_init();        // 初始化缓存系统
 }
 char *get_current_path(void)

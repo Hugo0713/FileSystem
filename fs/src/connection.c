@@ -1,5 +1,6 @@
 #include "connection.h"
 #include "log.h"
+#include "fs.h"
 #include <string.h>
 
 static connection_info connections[MAX_CONNECTIONS];
@@ -8,6 +9,10 @@ static int system_initialized = 0;
 // 初始化连接系统
 void init_connection_system(void)
 {
+#if CONNECTION_DISABLED
+    Log("Connection management is disabled");
+    return;
+#endif
     if (system_initialized)
         return;
 
@@ -25,6 +30,9 @@ void init_connection_system(void)
 // 初始化单个连接
 void init_connection(int connection_id)
 {
+#if CONNECTION_DISABLED
+    return;
+#endif
     if (!system_initialized)
     {
         init_connection_system();
@@ -34,7 +42,7 @@ void init_connection(int connection_id)
     {
         connections[connection_id].active = 1;
         connections[connection_id].current_dir = 0; // 根目录
-        connections[connection_id].current_uid = 0; // 匿名用户
+        connections[connection_id].current_uid = 0; // 管理员
         strcpy(connections[connection_id].current_path, "/");
         Log("Initialized connection %d", connection_id);
     }
@@ -43,6 +51,9 @@ void init_connection(int connection_id)
 // 清理连接
 void cleanup_connection(int connection_id)
 {
+#if CONNECTION_DISABLED
+    return;
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS)
     {
         connections[connection_id].active = 0;
@@ -56,6 +67,10 @@ void cleanup_connection(int connection_id)
 // 获取连接的当前目录
 uint get_connection_dir(int connection_id)
 {
+#if CONNECTION_DISABLED
+    extern uint current_dir;
+    return current_dir; // 如果连接管理被禁用，直接返回当前目录
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
@@ -67,17 +82,24 @@ uint get_connection_dir(int connection_id)
 // 获取连接的当前用户
 uint get_connection_uid(int connection_id)
 {
+#if CONNECTION_DISABLED
+    extern uint current_uid;
+    return current_uid; // 如果连接管理被禁用，直接返回当前用户ID
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
         return connections[connection_id].current_uid;
     }
-    return 0; // 默认返回匿名用户
+    return 0; // 默认返回管理员
 }
 
 // 获取连接的当前路径
 char *get_connection_path(int connection_id)
 {
+#if CONNECTION_DISABLED
+    return get_current_path(); // 如果连接管理被禁用，直接返回当前路径
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
@@ -89,6 +111,12 @@ char *get_connection_path(int connection_id)
 // 设置连接的当前目录
 void set_connection_dir(int connection_id, uint dir)
 {
+#if CONNECTION_DISABLED
+    // 如果连接管理被禁用，设置全局变量
+    extern uint current_dir;
+    current_dir = dir;
+    return;
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
@@ -99,6 +127,12 @@ void set_connection_dir(int connection_id, uint dir)
 // 设置连接的当前用户
 void set_connection_uid(int connection_id, uint uid)
 {
+#if CONNECTION_DISABLED
+    // 如果连接管理被禁用，设置全局变量
+    extern uint current_uid;
+    current_uid = uid;
+    return;
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
@@ -109,6 +143,11 @@ void set_connection_uid(int connection_id, uint uid)
 // 设置连接的当前路径
 void set_connection_path(int connection_id, const char *path)
 {
+#if CONNECTION_DISABLED
+    // 如果连接管理被禁用，设置全局路径
+    update_current_path(path);
+    return;
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active && path)
     {
@@ -120,6 +159,13 @@ void set_connection_path(int connection_id, const char *path)
 // 设置连接状态
 void set_connection_state(int connection_id, uint dir, uint uid)
 {
+#if CONNECTION_DISABLED
+    // 如果连接管理被禁用，设置全局变量
+    extern uint current_dir, current_uid;
+    current_dir = dir;
+    current_uid = uid;
+    return;
+#endif
     if (connection_id >= 0 && connection_id < MAX_CONNECTIONS &&
         connections[connection_id].active)
     {
